@@ -35,6 +35,7 @@ import {
 } from 'y-prosemirror';
 import { applyAwarenessUpdate, removeAwarenessStates } from 'y-protocols/awareness';
 import * as encoding from 'lib0/encoding';
+import { createElement, Bot, Share } from 'lucide';
 
 import { proofMarkPlugins } from './schema/proof-marks';
 import { codeBlockExtPlugins } from './schema/code-block-ext';
@@ -180,6 +181,7 @@ import { keybindingsPlugin, setShowAgentInputCallback, type AgentInputContext } 
 import { tableKeyboardPlugin } from './plugins/table-keyboard';
 import { showAgentInputDialog } from '../ui/agent-input-dialog';
 import { initContextMenu } from '../ui/context-menu';
+import { createShareBubbleButton, createShareBubbleInitial } from '../ui/share-pill-bubble';
 import {
   initAgentNavigation,
   navigateToAgent as navigateToAgentInEditor,
@@ -236,31 +238,32 @@ async function loadPrismPlugin(): Promise<MilkdownPlugin | null> {
   try {
     await import('prismjs');
 
-    await Promise.all([
-      import('prismjs/components/prism-markup'),
-      import('prismjs/components/prism-css'),
-      import('prismjs/components/prism-clike'),
-      import('prismjs/components/prism-javascript'),
-      import('prismjs/components/prism-typescript'),
-      import('prismjs/components/prism-jsx'),
-      import('prismjs/components/prism-tsx'),
-      import('prismjs/components/prism-ruby'),
-      import('prismjs/components/prism-python'),
-      import('prismjs/components/prism-go'),
-      import('prismjs/components/prism-rust'),
-      import('prismjs/components/prism-json'),
-      import('prismjs/components/prism-yaml'),
-      import('prismjs/components/prism-bash'),
-      import('prismjs/components/prism-sql'),
-      import('prismjs/components/prism-markdown'),
-      import('prismjs/components/prism-mermaid'),
-      import('prismjs/components/prism-swift'),
-      import('prismjs/components/prism-c'),
-      import('prismjs/components/prism-cpp'),
-      import('prismjs/components/prism-java'),
-      import('prismjs/components/prism-kotlin'),
-      import('prismjs/components/prism-php'),
-    ]);
+    // Prism components mutate a shared Prism.languages global with strict
+    // dependency order (e.g. tsx extends jsx extends javascript extends clike).
+    // Concurrent loading via Promise.all races and breaks the extend() chain.
+    await import('prismjs/components/prism-markup');
+    await import('prismjs/components/prism-css');
+    await import('prismjs/components/prism-clike');
+    await import('prismjs/components/prism-javascript');
+    await import('prismjs/components/prism-typescript');
+    await import('prismjs/components/prism-jsx');
+    await import('prismjs/components/prism-tsx');
+    await import('prismjs/components/prism-c');
+    await import('prismjs/components/prism-cpp');
+    await import('prismjs/components/prism-java');
+    await import('prismjs/components/prism-kotlin');
+    await import('prismjs/components/prism-ruby');
+    await import('prismjs/components/prism-python');
+    await import('prismjs/components/prism-go');
+    await import('prismjs/components/prism-rust');
+    await import('prismjs/components/prism-json');
+    await import('prismjs/components/prism-yaml');
+    await import('prismjs/components/prism-bash');
+    await import('prismjs/components/prism-sql');
+    await import('prismjs/components/prism-markdown');
+    await import('prismjs/components/prism-mermaid');
+    await import('prismjs/components/prism-swift');
+    await import('prismjs/components/prism-php');
 
     const { prism } = await import('@milkdown/plugin-prism');
     return prism as unknown as MilkdownPlugin;
@@ -3017,9 +3020,6 @@ class ProofEditorImpl implements ProofEditor {
         align-items: center;
         flex-shrink: 0;
       }
-      #share-banner .share-pill-agent-trigger .agent-btn-label {
-        white-space: nowrap;
-      }
       #share-banner .share-pill-agent-trigger.has-agents {
         padding: 0 4px;
       }
@@ -3095,14 +3095,8 @@ class ProofEditorImpl implements ProofEditor {
         #share-banner .share-pill-human-avatars {
           display: none !important;
         }
-        #share-banner .share-pill-agent-trigger {
-          padding: 0 10px !important;
-        }
         #share-banner .share-pill-agent-trigger.has-agents {
           padding: 0 2px !important;
-        }
-        #share-banner .share-pill-agent-trigger .agent-btn-label {
-          font-size: 11px !important;
         }
         #share-banner .share-pill-status-inline .status-label {
           display:none !important;
@@ -3145,16 +3139,11 @@ class ProofEditorImpl implements ProofEditor {
       const wrap = document.createElement('span');
       wrap.className = 'proof-avatar-wrap';
       wrap.style.cssText = `display:inline-flex;align-items:center;justify-content:center;margin-left:${i > 0 ? '-6px' : '0'};z-index:${5 - i};position:relative;`;
-      const circle = document.createElement('span');
-      circle.textContent = avatar.initial;
-      circle.style.cssText = `
-        width:24px;height:24px;border-radius:50%;
-        background:${avatar.color};color:#fff;
-        font-size:11px;font-weight:600;
-        display:inline-flex;align-items:center;justify-content:center;
-        border:2px solid #fff;
-        box-shadow:0 0 0 0.5px rgba(0,0,0,0.08);
-      `;
+      const circle = createShareBubbleInitial({
+        initial: avatar.initial,
+        bg: avatar.color,
+        withRing: true,
+      });
       const tooltip = document.createElement('span');
       tooltip.className = 'proof-avatar-tooltip';
       const tooltipName = document.createElement('span');
@@ -3169,15 +3158,14 @@ class ProofEditorImpl implements ProofEditor {
       container.appendChild(wrap);
     }
     if (avatars.length > 5) {
-      const overflow = document.createElement('span');
-      overflow.textContent = `+${avatars.length - 5}`;
-      overflow.style.cssText = `
-        width:24px;height:24px;border-radius:50%;
-        background:#e5e7eb;color:#4b5563;
-        font-size:10px;font-weight:600;
-        display:inline-flex;align-items:center;justify-content:center;
-        border:2px solid #fff;margin-left:-6px;
-      `;
+      const overflow = createShareBubbleInitial({
+        initial: `+${avatars.length - 5}`,
+        bg: '#e5e7eb',
+        fg: '#4b5563',
+        withRing: true,
+        fontSize: 11,
+      });
+      overflow.style.marginLeft = '-6px';
       container.appendChild(overflow);
     }
 
@@ -4053,28 +4041,12 @@ class ProofEditorImpl implements ProofEditor {
     container.className = 'share-pill-share-btn';
     container.style.cssText = 'position:relative;display:inline-flex;align-items:center';
 
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.setAttribute('aria-label', 'Share options');
-    btn.style.cssText = `
-      display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:44px;min-width:44px;padding:0 16px;background:#111;
-      border:none;border-radius:22px;color:#fff;font-size:13px;font-weight:600;
-      cursor:pointer;transition:background 0.15s;flex-shrink:0;font-family:inherit;
-    `;
-
-    const label = document.createElement('span');
-    label.textContent = 'Share';
-    const caret = document.createElement('span');
-    caret.textContent = '▾';
-    caret.style.cssText = 'font-size:10px;opacity:0.7';
-    btn.append(label, caret);
-
-    btn.onmouseenter = () => {
-      btn.style.background = '#333';
-    };
-    btn.onmouseleave = () => {
-      btn.style.background = '#111';
-    };
+    const btn = createShareBubbleButton({
+      ariaLabel: 'Share options',
+      icon: createElement(Share),
+      label: 'Share file',
+      iconSize: 14,
+    });
 
     const openMenu = () => {
       this.closeAgentMenu();
@@ -4324,11 +4296,11 @@ class ProofEditorImpl implements ProofEditor {
       };
     };
 
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'share-pill-agent-trigger';
+    let btn: HTMLButtonElement;
     if (hasAgents) {
-      btn.classList.add('has-agents');
+      btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'share-pill-agent-trigger has-agents';
       btn.setAttribute('aria-label', `${agents.length} agent collaborator${agents.length === 1 ? '' : 's'}. Open actions`);
       btn.setAttribute('aria-haspopup', 'menu');
       btn.setAttribute('aria-expanded', 'false');
@@ -4367,32 +4339,12 @@ class ProofEditorImpl implements ProofEditor {
         btn.style.background = 'transparent';
       };
     } else {
-      btn.setAttribute('aria-label', 'Add agent');
-      btn.style.cssText = `
-        display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:44px;min-width:44px;padding:0 12px;
-        background:rgba(255,255,255,0.7);border:1px solid rgba(17,24,39,0.10);border-radius:22px;color:#111827;
-        font-size:12px;font-weight:500;cursor:pointer;transition:background 0.15s,border-color 0.15s;flex-shrink:0;font-family:inherit;
-      `;
-
-      const icon = document.createElement('span');
-      icon.textContent = '+';
-      icon.style.cssText = 'font-size:12px;line-height:1;color:#6b7280;';
-      btn.appendChild(icon);
-
-      const label = document.createElement('span');
-      label.className = 'agent-btn-label';
-      label.textContent = 'Add agent';
-      label.style.cssText = 'font-size:12px;font-weight:600;line-height:1;';
-      btn.appendChild(label);
-
-      btn.onmouseenter = () => {
-        btn.style.background = '#fff';
-        btn.style.borderColor = 'rgba(17,24,39,0.20)';
-      };
-      btn.onmouseleave = () => {
-        btn.style.background = 'rgba(255,255,255,0.7)';
-        btn.style.borderColor = 'rgba(17,24,39,0.10)';
-      };
+      btn = createShareBubbleButton({
+        ariaLabel: 'Add agent',
+        icon: createElement(Bot),
+        label: 'Add agent',
+        className: 'share-pill-agent-trigger',
+      });
     }
 
     const openMenu = () => {

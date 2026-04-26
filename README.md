@@ -36,16 +36,16 @@ Fix: The Milkdown Nord theme dependency and `.config(nord)` hook were removed,
 so app CSS is now the main theme surface for the editor and shared document
 view.
 
-### 3. Markdown Toolbar Lives On The Mark Selection Bar
+### 3. Markdown Toolbar Is Added End-to-End
 
-Problem: The markdown toolbar sat in the topbar as a separate dark pill button
-with its own container styles, while the floating mark-selection-bar already
-hosted the other selection-driven actions (Comment, Flag, Suggest). Two
-contextual surfaces competed for attention and the toolbar's chrome did not
-match the rest of the share banner.
+Problem: Markdown formatting support existed in pieces, but it was not wired
+end-to-end into the editor UI. Earlier toolbar-shaped code did not need to be a
+Milkdown prose plugin, and putting formatting in a separate topbar control would
+split selection-driven actions across two places.
 
-Fix: The toolbar is now a fourth `Format` button on the mark-selection-bar,
-reusing the bar's existing pill-button styling. `buildMarkdownToolbarMenu`
-exposes the dropdown as a pure factory that the bar mounts and tears down
-alongside its own lifecycle, so the menu cannot outlive a hidden bar and the
-topbar carries no toolbar wiring.
+Fix: The toolbar is now implemented end-to-end as a `Format` button on the
+mark-selection-bar, next to `Comment`, `Flag`, and `Suggest`, reusing the bar's
+existing pill-button styling. `buildMarkdownToolbarMenu` exposes the dropdown
+as a pure factory that reads Milkdown commands from the editor context; the
+mark-selection-bar mounts and tears it down with its own lifecycle, so the menu
+cannot outlive a hidden bar and the topbar carries no toolbar wiring.

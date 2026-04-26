@@ -5,6 +5,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { apiRoutes } from './routes.js';
 import { agentRoutes } from './agent-routes.js';
+import { metricsApiRoutes } from './metrics.js';
 import { setupWebSocket } from './ws.js';
 import { createBridgeMountRouter } from './bridge.js';
 import { getCollabRuntime, startCollabRuntimeEmbedded } from './collab.js';
@@ -54,6 +55,7 @@ async function main(): Promise<void> {
     const originHeader = req.header('origin');
     if (originHeader && allowedCorsOrigins.has(originHeader)) {
       res.setHeader('Access-Control-Allow-Origin', originHeader);
+      res.setHeader('Access-Control-Allow-Credentials', 'true');
       res.setHeader('Vary', 'Origin');
     }
     res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,PATCH,DELETE,OPTIONS');
@@ -122,6 +124,7 @@ async function main(): Promise<void> {
   });
 
   app.use(discoveryRoutes);
+  app.use('/api/metrics', metricsApiRoutes);
   app.use('/api', enforceApiClientCompatibility, apiRoutes);
   app.use('/api/agent', agentRoutes);
   app.use(apiRoutes);
