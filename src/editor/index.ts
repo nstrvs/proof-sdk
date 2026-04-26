@@ -18,14 +18,14 @@ import {
   serializerCtx,
   remarkStringifyOptionsCtx,
   prosePluginsCtx,
-} from '@milkdown/core';
-import { commonmark } from '@milkdown/preset-commonmark';
-import { gfm } from '@milkdown/preset-gfm';
-import { history } from '@milkdown/plugin-history';
+} from '@milkdown/kit/core';
+import { commonmark } from '@milkdown/kit/preset/commonmark';
+import { gfm } from '@milkdown/kit/preset/gfm';
+import { history } from '@milkdown/kit/plugin/history';
 import { collab, collabServiceCtx } from '@milkdown/plugin-collab';
-import { listener, listenerCtx } from '@milkdown/plugin-listener';
-import { cursor } from '@milkdown/plugin-cursor';
-import { clipboard } from '@milkdown/plugin-clipboard';
+import { listener, listenerCtx } from '@milkdown/kit/plugin/listener';
+import { cursor } from '@milkdown/kit/plugin/cursor';
+import { clipboard } from '@milkdown/kit/plugin/clipboard';
 import { nord } from '@milkdown/theme-nord';
 import {
   yCursorPlugin,

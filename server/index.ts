@@ -16,24 +16,25 @@ import {
   enforceBridgeClientCompatibility,
 } from './client-capabilities.js';
 import { getBuildInfo } from './build-info.js';
+import {
+  LOCAL_CORS_ORIGINS,
+  resolveLocalServerListenHost,
+  resolveLocalServerOrigin,
+  resolveLocalServerPort,
+} from '../local-dev.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const PORT = Number.parseInt(process.env.PORT || '4000', 10);
-const DEFAULT_ALLOWED_CORS_ORIGINS = [
-  'http://localhost:3000',
-  'http://127.0.0.1:3000',
-  'http://localhost:4000',
-  'http://127.0.0.1:4000',
-  'null',
-];
+const PORT = resolveLocalServerPort(process.env);
+const LISTEN_HOST = resolveLocalServerListenHost(process.env);
+const SERVER_ORIGIN = resolveLocalServerOrigin(process.env);
 
 function parseAllowedCorsOrigins(): Set<string> {
   const configured = (process.env.PROOF_CORS_ALLOW_ORIGINS || '')
     .split(',')
     .map((value) => value.trim())
     .filter(Boolean);
-  return new Set(configured.length > 0 ? configured : DEFAULT_ALLOWED_CORS_ORIGINS);
+  return new Set(configured.length > 0 ? configured : LOCAL_CORS_ORIGINS);
 }
 
 async function main(): Promise<void> {
@@ -132,9 +133,11 @@ async function main(): Promise<void> {
   setupWebSocket(wss);
   await startCollabRuntimeEmbedded(PORT);
 
-  server.listen(PORT, () => {
-    console.log(`[proof-sdk] listening on http://127.0.0.1:${PORT}`);
-  });
+  const onListening = () => {
+    console.log(`[proof-sdk] listening on ${SERVER_ORIGIN}`);
+  };
+  if (LISTEN_HOST) server.listen(PORT, LISTEN_HOST, onListening);
+  else server.listen(PORT, onListening);
 }
 
 main().catch((error) => {

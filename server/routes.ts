@@ -103,6 +103,7 @@ import {
   buildProofSdkDocumentPaths,
   buildProofSdkLinks,
 } from './proof-sdk-routes.js';
+import { getPublicBaseUrl, trustProxyHeaders } from './public-base-url.js';
 
 export const apiRoutes = Router();
 runLegacyMarkRangeBackfillOnce();
@@ -139,11 +140,6 @@ function getSlugParam(req: Request): string | null {
 
 function isMarksPayload(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
-}
-
-function trustProxyHeaders(): boolean {
-  const value = (process.env.PROOF_TRUST_PROXY_HEADERS || '').trim().toLowerCase();
-  return value === '1' || value === 'true' || value === 'yes';
 }
 
 function parseJson(value: string): Record<string, unknown> {
@@ -549,31 +545,6 @@ function checkDirectShareRateLimit(
 
   existing.count += 1;
   return { allowed: true };
-}
-
-function getPublicBaseUrl(req: Request): string {
-  if (trustProxyHeaders()) {
-    const forwardedProtoHeader = req.header('x-forwarded-proto');
-    const forwardedHostHeader = req.header('x-forwarded-host');
-    const forwardedProto = typeof forwardedProtoHeader === 'string'
-      ? forwardedProtoHeader.split(',')[0]?.trim()
-      : '';
-    const forwardedHost = typeof forwardedHostHeader === 'string'
-      ? forwardedHostHeader.split(',')[0]?.trim()
-      : '';
-    if (forwardedProto && forwardedHost) {
-      return `${forwardedProto}://${forwardedHost}`;
-    }
-  }
-
-  const configuredBase = (process.env.PROOF_PUBLIC_BASE_URL || '').trim();
-  if (configuredBase) {
-    return configuredBase.replace(/\/+$/, '');
-  }
-
-  const host = req.get('host') || '';
-  if (!host) return '';
-  return `${req.protocol || 'http'}://${host}`;
 }
 
 function isLoopbackHost(hostname: string): boolean {

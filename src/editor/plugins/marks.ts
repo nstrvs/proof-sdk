@@ -16,7 +16,6 @@ import { ySyncPluginKey } from 'y-prosemirror';
 import { buildTextIndex, getTextForRange, mapTextOffsetsToRange, resolveQuoteRange } from '../utils/text-range';
 import { SHARE_CONTENT_FILTER_ALLOW_META } from './share-content-filter';
 import { normalizeHtmlTablesToMarkdown } from '../../shared/html-table-markdown';
-import { shareClient } from '../../bridge/share-client';
 
 import {
   type Mark,
@@ -94,8 +93,17 @@ function reportMarkAnchorResolution(result: 'success' | 'failure'): void {
   if (typeof window === 'undefined') return;
   const path = window.location.pathname;
   if (!path.startsWith('/d/')) return;
-  const url = `${shareClient.getApiBaseUrl()}/metrics/mark-anchor`;
   const payload = JSON.stringify({ result, source: 'web' });
+  void import('../../bridge/share-client.js')
+    .then(({ shareClient }) => {
+      sendMarkAnchorResolution(`${shareClient.getApiBaseUrl()}/metrics/mark-anchor`, payload);
+    })
+    .catch(() => {
+      // best-effort observability only
+    });
+}
+
+function sendMarkAnchorResolution(url: string, payload: string): void {
   if (typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
     try {
       navigator.sendBeacon(url, new Blob([payload], { type: 'application/json' }));

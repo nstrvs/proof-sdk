@@ -9,41 +9,12 @@ import {
   AUTH_HEADER_FORMAT,
   CANONICAL_CREATE_API_PATH,
 } from './agent-guidance.js';
+import { getPublicBaseUrl } from './public-base-url.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 export const discoveryRoutes = Router();
-
-function trustProxyHeaders(): boolean {
-  const value = (process.env.PROOF_TRUST_PROXY_HEADERS || '').trim().toLowerCase();
-  return value === '1' || value === 'true' || value === 'yes';
-}
-
-function getPublicBaseUrl(req: Request): string {
-  if (trustProxyHeaders()) {
-    const forwardedProtoHeader = req.header('x-forwarded-proto');
-    const forwardedHostHeader = req.header('x-forwarded-host');
-    const forwardedProto = typeof forwardedProtoHeader === 'string'
-      ? forwardedProtoHeader.split(',')[0]?.trim()
-      : '';
-    const forwardedHost = typeof forwardedHostHeader === 'string'
-      ? forwardedHostHeader.split(',')[0]?.trim()
-      : '';
-    if (forwardedProto && forwardedHost) {
-      return `${forwardedProto}://${forwardedHost}`;
-    }
-  }
-
-  const configuredBase = (process.env.PROOF_PUBLIC_BASE_URL || '').trim();
-  if (configuredBase) {
-    return configuredBase.replace(/\/+$/, '');
-  }
-
-  const host = req.get('host') || '';
-  if (!host) return '';
-  return `${req.protocol || 'http'}://${host}`;
-}
 
 const textSearchDirs = [
   path.resolve(__dirname, '..'),
