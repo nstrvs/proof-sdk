@@ -1,6 +1,9 @@
 import { defineConfig } from 'vite';
 import { resolve } from 'path';
 
+const editorHost = 'localhost';
+const editorPort = 3000;
+
 export default defineConfig({
   root: 'src',
   publicDir: resolve(__dirname, 'public'),
@@ -28,55 +31,9 @@ export default defineConfig({
     },
   },
   server: {
-    port: 3000,
+    host: editorHost,
+    port: editorPort,
     strictPort: true,  // Fail if port in use instead of auto-incrementing
     open: false,
-    host: 'localhost',
-    proxy: {
-      '/assets': {
-        target: 'http://localhost:4000',
-        changeOrigin: true,
-      },
-      '/api': {
-        target: 'http://localhost:4000',
-        changeOrigin: true,
-      },
-      '/d': {
-        target: 'http://localhost:4000',
-        changeOrigin: true,
-      },
-      '/new': {
-        target: 'http://localhost:4000',
-        changeOrigin: true,
-      },
-      '/get-started': {
-        target: 'http://localhost:4000',
-        changeOrigin: true,
-      },
-      '/agent-docs': {
-        target: 'http://localhost:4000',
-        changeOrigin: true,
-      },
-      '/open': {
-        target: 'http://localhost:4000',
-        changeOrigin: true,
-      },
-      '/logout': {
-        target: 'http://localhost:4000',
-        changeOrigin: true,
-      },
-      '/proof.SKILL.md': {
-        target: 'http://localhost:4000',
-        changeOrigin: true,
-      },
-      '/snapshots': {
-        target: 'http://localhost:4000',
-        changeOrigin: true,
-      },
-      '/ws': {
-        target: 'ws://localhost:4000',
-        ws: true,
-      },
-    },
   },
 });

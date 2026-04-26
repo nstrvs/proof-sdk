@@ -16,13 +16,14 @@ import { parseMarkdownPreservingExplicitBlankParagraphs } from '../src/editor/ex
 import { frontmatterSchema } from '../src/editor/schema/frontmatter.js';
 import { proofMarkPlugins } from '../src/editor/schema/proof-marks.js';
 import { remarkProofMarks, proofMarkHandler } from '../src/formats/remark-proof-marks.js';
+import { normalizeHtmlTablesToMarkdown } from '../src/shared/html-table-markdown.js';
 
 export type HeadlessMilkdownParser = {
   schema: Schema;
   parseMarkdown: (markdown: string) => ProseMirrorNode;
 };
 
-export type MarkdownParseFallbackMode = 'original' | 'strip_html_lines' | 'strip_html_tags' | 'failed';
+export type MarkdownParseFallbackMode = 'original' | 'html_tables' | 'strip_html_lines' | 'strip_html_tags' | 'failed';
 
 export type MarkdownParseWithFallbackResult = {
   doc: ProseMirrorNode | null;
@@ -75,10 +76,15 @@ export function parseMarkdownWithHtmlFallback(
 ): MarkdownParseWithFallbackResult {
   const input = markdown ?? '';
   const candidates: Array<{ mode: Exclude<MarkdownParseFallbackMode, 'failed'>; value: string }> = [];
+
+  const withHtmlTables = normalizeHtmlTablesToMarkdown(input);
+  if (withHtmlTables !== input) {
+    candidates.push({ mode: 'html_tables', value: withHtmlTables });
+  }
   candidates.push({ mode: 'original', value: input });
 
-  const withoutHtmlLines = stripStandaloneHtmlLines(input);
-  if (withoutHtmlLines !== input) {
+  const withoutHtmlLines = stripStandaloneHtmlLines(withHtmlTables);
+  if (withoutHtmlLines !== withHtmlTables) {
     candidates.push({ mode: 'strip_html_lines', value: withoutHtmlLines });
   }
 

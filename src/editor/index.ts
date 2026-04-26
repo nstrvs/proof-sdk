@@ -149,6 +149,7 @@ import { collabClient, type CollabSyncStatus } from '../bridge/collab-client';
 import { shouldDeferShareMarksRefresh } from './share-marks-refresh';
 import { collabCursorBuilder, collabSelectionBuilder } from './plugins/collab-cursors';
 import { isAgentScopedId } from '../shared/agent-identity';
+import { normalizeHtmlTablesToMarkdown } from '../shared/html-table-markdown';
 import {
   assignDistinctAgentFamilies,
   createAgentFaceElement,
@@ -3911,13 +3912,7 @@ class ProofEditorImpl implements ProofEditor {
     const shareUrl = this.getCanonicalShareUrl();
     const slug = shareClient.getSlug() || this.extractShareSlugFromUrl(shareUrl);
     const token = this.extractShareTokenFromUrl(shareUrl);
-    const origin = (() => {
-      try {
-        return new URL(shareUrl).origin;
-      } catch {
-        return window.location.origin;
-      }
-    })();
+    const agentApiBase = shareClient.getApiBaseUrl().replace(/\/+$/, '');
 
     if (!slug) {
       return [
@@ -3928,10 +3923,10 @@ class ProofEditorImpl implements ProofEditor {
     }
 
     const encodedSlug = encodeURIComponent(slug);
-    const presenceUrl = `${origin}/api/agent/${encodedSlug}/presence`;
-    const stateUrl = `${origin}/api/agent/${encodedSlug}/state`;
-    const opsUrl = `${origin}/api/agent/${encodedSlug}/ops`;
-    const editUrl = `${origin}/api/agent/${encodedSlug}/edit`;
+    const presenceUrl = `${agentApiBase}/agent/${encodedSlug}/presence`;
+    const stateUrl = `${agentApiBase}/agent/${encodedSlug}/state`;
+    const opsUrl = `${agentApiBase}/agent/${encodedSlug}/ops`;
+    const editUrl = `${agentApiBase}/agent/${encodedSlug}/edit`;
 
     return [
       'Collaborate with me on this Proof doc.',
@@ -5554,7 +5549,8 @@ class ProofEditorImpl implements ProofEditor {
     }
 
     const { content: provenanceStripped, provenance } = extractEmbeddedProvenance(content);
-    const { content: cleanContent, marks: embeddedMetadata, legacyMarks = [] } = extractMarks(provenanceStripped);
+    const { content: rawCleanContent, marks: embeddedMetadata, legacyMarks = [] } = extractMarks(provenanceStripped);
+    const cleanContent = normalizeHtmlTablesToMarkdown(rawCleanContent);
 
     if (!this.hasTrackedDocumentOpened) {
       this.hasTrackedDocumentOpened = true;
@@ -6032,7 +6028,8 @@ class ProofEditorImpl implements ProofEditor {
       const clampedOffset = Math.max(0, Math.min(offset, docSizeBefore));
 
       // Parse the text as markdown and insert
-      const newContent = parser(text);
+      const normalizedText = normalizeHtmlTablesToMarkdown(text);
+      const newContent = parser(normalizedText);
       let tr = view.state.tr.insert(clampedOffset, newContent.content);
 
       // Mark as AI-authored if author is specified (prevents double-marking by human tracker)
@@ -6048,7 +6045,7 @@ class ProofEditorImpl implements ProofEditor {
       // Create authored mark for the inserted content if author is specified
       if (author && actualInsertedLength > 0) {
         const range: MarkRange = { from: clampedOffset, to: clampedOffset + actualInsertedLength };
-        addAuthoredMark(view, author, range, text);
+        addAuthoredMark(view, author, range, normalizedText);
         console.log('[insertAt] Created authored mark for', author, 'at range', range, 'actualLength:', actualInsertedLength);
 
       }
@@ -6075,7 +6072,8 @@ class ProofEditorImpl implements ProofEditor {
       const docSizeBefore = view.state.doc.content.size;
 
       // Parse the text as markdown and insert
-      const newContent = parser(text);
+      const normalizedText = normalizeHtmlTablesToMarkdown(text);
+      const newContent = parser(normalizedText);
       let tr = view.state.tr.insert(from, newContent.content);
 
       // Mark as AI-authored if author is specified (prevents double-marking by human tracker)
@@ -6091,7 +6089,7 @@ class ProofEditorImpl implements ProofEditor {
       // Create authored mark for the inserted content if author is specified
       if (author && actualInsertedLength > 0) {
         const range: MarkRange = { from, to: from + actualInsertedLength };
-        addAuthoredMark(view, author, range, text);
+        addAuthoredMark(view, author, range, normalizedText);
         console.log('[insertAtCursor] Created authored mark for', author, 'at range', range, 'actualLength:', actualInsertedLength);
 
       }
@@ -6119,7 +6117,8 @@ class ProofEditorImpl implements ProofEditor {
       const selectionLength = to - from;
 
       // Parse the text as markdown and replace
-      const newContent = parser(text);
+      const normalizedText = normalizeHtmlTablesToMarkdown(text);
+      const newContent = parser(normalizedText);
       let tr = view.state.tr.replaceWith(from, to, newContent.content);
 
       // Mark as AI-authored if author is specified (prevents double-marking by human tracker)
@@ -6136,7 +6135,7 @@ class ProofEditorImpl implements ProofEditor {
       // Create authored mark for the replacement content if author is specified
       if (author && actualInsertedLength > 0) {
         const range: MarkRange = { from, to: from + actualInsertedLength };
-        addAuthoredMark(view, author, range, text);
+        addAuthoredMark(view, author, range, normalizedText);
         console.log('[replaceSelection] Created authored mark for', author, 'at range', range, 'actualLength:', actualInsertedLength);
 
       }
@@ -6167,7 +6166,8 @@ class ProofEditorImpl implements ProofEditor {
       const rangeLength = clampedTo - clampedFrom;
 
       // Parse the text as markdown and replace
-      const newContent = parser(text);
+      const normalizedText = normalizeHtmlTablesToMarkdown(text);
+      const newContent = parser(normalizedText);
       let tr = view.state.tr.replaceWith(clampedFrom, clampedTo, newContent.content);
 
       // Mark as AI-authored if author is specified (prevents double-marking by human tracker)
@@ -6184,7 +6184,7 @@ class ProofEditorImpl implements ProofEditor {
       // Create authored mark for the replacement content if author is specified
       if (author && actualInsertedLength > 0) {
         const range: MarkRange = { from: clampedFrom, to: clampedFrom + actualInsertedLength };
-        addAuthoredMark(view, author, range, text);
+        addAuthoredMark(view, author, range, normalizedText);
         console.log('[replaceRange] Created authored mark for', author, 'at range', range, 'actualLength:', actualInsertedLength);
 
       }

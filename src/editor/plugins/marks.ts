@@ -15,6 +15,8 @@ import type { Node as ProseMirrorNode, MarkType } from '@milkdown/kit/prose/mode
 import { ySyncPluginKey } from 'y-prosemirror';
 import { buildTextIndex, getTextForRange, mapTextOffsetsToRange, resolveQuoteRange } from '../utils/text-range';
 import { SHARE_CONTENT_FILTER_ALLOW_META } from './share-content-filter';
+import { normalizeHtmlTablesToMarkdown } from '../../shared/html-table-markdown';
+import { shareClient } from '../../bridge/share-client';
 
 import {
   type Mark,
@@ -92,7 +94,7 @@ function reportMarkAnchorResolution(result: 'success' | 'failure'): void {
   if (typeof window === 'undefined') return;
   const path = window.location.pathname;
   if (!path.startsWith('/d/')) return;
-  const url = `${window.location.origin}/api/metrics/mark-anchor`;
+  const url = `${shareClient.getApiBaseUrl()}/metrics/mark-anchor`;
   const payload = JSON.stringify({ result, source: 'web' });
   if (typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
     try {
@@ -628,7 +630,7 @@ function buildReplacementContent(
 
   let parsed: ProseMirrorNode;
   try {
-    parsed = parser(markdown);
+    parsed = parser(normalizeHtmlTablesToMarkdown(markdown));
   } catch (error) {
     console.warn('[marks.accept] Failed to parse markdown during accept; falling back to text:', error);
     return fallback;
@@ -2173,7 +2175,7 @@ function resolveMarkdownParser(parser?: MarkdownParser): MarkdownParser | undefi
 function parseMarkdownFragment(parser: MarkdownParser | undefined, text: string): Fragment | null {
   if (!parser) return null;
   try {
-    const parsed = parser(text);
+    const parsed = parser(normalizeHtmlTablesToMarkdown(text));
     return parsed.content;
   } catch (error) {
     console.warn('[marks] Failed to parse markdown suggestion; falling back to text.', error);
@@ -2368,7 +2370,7 @@ function parseHeadingMarkdown(
   // inside headings is preserved on accept.
   if (parser) {
     try {
-      const parsed = parser(trimmed);
+      const parsed = parser(normalizeHtmlTablesToMarkdown(trimmed));
       const first = parsed.content.firstChild;
       if (parsed.content.childCount === 1 && first?.type?.name === 'heading') {
         return first;
@@ -2391,7 +2393,7 @@ function parseHeadingMarkdown(
   // by parsing the heading text content into inline marks.
   if (parser) {
     try {
-      const parsedInline = parser(text);
+      const parsedInline = parser(normalizeHtmlTablesToMarkdown(text));
       if (parsedInline.content.childCount === 1) {
         const firstBlock = parsedInline.content.firstChild;
         if (firstBlock?.isTextblock && headingType.validContent(firstBlock.content)) {

@@ -97,6 +97,7 @@ import {
   validateOpPrecondition,
 } from './mutation-stage.js';
 import { resolveExplicitAgentIdentity } from '../src/shared/agent-identity.js';
+import { normalizeHtmlTablesToMarkdown } from '../src/shared/html-table-markdown.js';
 import {
   buildProofSdkAgentDescriptor,
   buildProofSdkDocumentPaths,
@@ -124,6 +125,10 @@ export const shareMarkdownBodyParser = text({
   type: ['text/plain', 'text/markdown'],
   limit: '10mb',
 });
+
+function normalizeIncomingMarkdown(markdown: string): string {
+  return normalizeHtmlTablesToMarkdown(stripEphemeralCollabSpans(markdown));
+}
 
 function getSlugParam(req: Request): string | null {
   const slugParam = req.params.slug;
@@ -809,7 +814,7 @@ apiRoutes.post('/documents', (req: Request, res: Response) => {
     });
     return;
   }
-  const sanitizedMarkdown = stripEphemeralCollabSpans(markdown);
+  const sanitizedMarkdown = normalizeIncomingMarkdown(markdown);
   if (isBlankMarkdown(sanitizedMarkdown)) {
     res.status(400).json({
       error: 'markdown must not be empty',
@@ -1043,7 +1048,7 @@ export async function handleShareMarkdown(req: Request, res: Response): Promise<
     ? req.body
     : (body?.markdown ?? body?.content);
   const markdown = typeof markdownCandidate === 'string' ? markdownCandidate : '';
-  const sanitizedMarkdown = stripEphemeralCollabSpans(markdown);
+  const sanitizedMarkdown = normalizeIncomingMarkdown(markdown);
   if (!sanitizedMarkdown.trim()) {
     res.status(400).json({
       error: 'markdown field is required',
@@ -1325,7 +1330,7 @@ apiRoutes.put('/documents/:slug', async (req: Request, res: Response) => {
     res.status(400).json({ error: 'markdown must be a string when provided' });
     return;
   }
-  const sanitizedMarkdown = hasMarkdownUpdate ? stripEphemeralCollabSpans(markdown as string) : '';
+  const sanitizedMarkdown = hasMarkdownUpdate ? normalizeIncomingMarkdown(markdown as string) : '';
   if (hasMarkdownUpdate && isBlankMarkdown(sanitizedMarkdown)) {
     res.status(400).json({ error: 'markdown must not be empty', code: 'EMPTY_MARKDOWN' });
     return;

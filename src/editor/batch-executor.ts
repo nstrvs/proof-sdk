@@ -18,6 +18,7 @@ import {
 } from './utils/selectors';
 import { setAgentCursor, setAgentSelection } from './plugins/agent-cursor';
 import { captureEvent } from '../analytics/telemetry';
+import { normalizeHtmlTablesToMarkdown } from '../shared/html-table-markdown';
 
 // Types
 
@@ -263,7 +264,7 @@ function executeInsert(
   insertPos = Math.max(0, Math.min(insertPos, docSize));
 
   // Parse and insert
-  const newContent = parser(text);
+  const newContent = parser(normalizeHtmlTablesToMarkdown(text));
   ctx.tr = ctx.tr.insert(insertPos, newContent.content);
 
   // Update context - cursor moves to end of inserted content
@@ -310,7 +311,7 @@ function executeReplace(
   range.to = Math.max(0, Math.min(range.to, docSize));
 
   // Parse new content
-  const newContent = parser(text);
+  const newContent = parser(normalizeHtmlTablesToMarkdown(text));
 
   // Use replaceWith which DELETES old content then inserts new
   ctx.tr = ctx.tr.replaceWith(range.from, range.to, newContent.content);

@@ -255,7 +255,7 @@ export class ShareClient {
     if (!this.slug) return null;
     const token = options?.token?.trim() || this.shareToken;
     if (!token) return null;
-    const origin = options?.origin?.trim() || this.apiOriginOverride || window.location.origin;
+    const origin = options?.origin?.trim() || window.location.origin;
     return `${origin}/d/${encodeURIComponent(this.slug)}?token=${encodeURIComponent(token)}`;
   }
 
@@ -274,6 +274,21 @@ export class ShareClient {
 
   getApiBaseUrl(): string {
     return this.getApiBase();
+  }
+
+  private getWebSocketBase(): string {
+    const origin = this.apiOriginOverride || window.location.origin;
+    try {
+      const url = new URL(origin);
+      url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+      url.pathname = '/ws';
+      url.search = '';
+      url.hash = '';
+      return url.toString().replace(/\/+$/, '');
+    } catch {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      return `${protocol}//${window.location.host}/ws`;
+    }
   }
 
   getShareAuthHeaders(explicitToken?: string): Record<string, string> {
@@ -1022,8 +1037,7 @@ export class ShareClient {
       return;
     }
 
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/ws?slug=${encodeURIComponent(this.slug)}&token=${encodeURIComponent(wsToken)}`;
+    const wsUrl = `${this.getWebSocketBase()}?slug=${encodeURIComponent(this.slug)}&token=${encodeURIComponent(wsToken)}`;
 
     const socket = new WebSocket(wsUrl);
     this.ws = socket;

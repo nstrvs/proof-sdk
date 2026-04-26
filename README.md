@@ -41,13 +41,15 @@ Start the editor:
 npm run dev
 ```
 
+Editor UI runs at `http://localhost:3000`.
+
 Start the local server:
 
 ```bash
 npm run serve
 ```
 
-The default setup serves the editor on `http://localhost:3000` and the API/server on `http://localhost:4000`.
+API, collaboration, agent docs, and server-rendered routes run at `http://localhost:4000`.
 
 ## Core Routes
 
