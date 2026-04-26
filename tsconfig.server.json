@@ -1,13 +1,12 @@
 {
   "compilerOptions": {
     "target": "ES2020",
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
     "esModuleInterop": true,
     "strict": true,
     "skipLibCheck": true,
-    "outDir": "./dist-server",
-    "rootDir": ".",
+    "noEmit": true,
     "resolveJsonModule": true,
     "declaration": false
   },

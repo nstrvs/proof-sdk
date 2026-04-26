@@ -21,7 +21,7 @@ const CIRCLE_STYLE = `${SHARED_STYLE}
 `;
 
 const PILL_STYLE = `${SHARED_STYLE}
-  height:${SHARE_BUBBLE_SIZE}px;padding:0 12px;gap:6px;border-radius:999px;
+  height:${SHARE_BUBBLE_SIZE}px;padding:0 12px;gap:6px;border-radius:12px;
 `;
 
 const BUTTON_BG = 'transparent';

@@ -4,4 +4,5 @@
 - added toolbar to editor mark-selection-bar
 - editor mark-selection-bar better position
 - editor table view
-- 
+- topbar text -> icons
+- added ARCHITECTURE.md

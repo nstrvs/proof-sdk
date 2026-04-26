@@ -6,8 +6,8 @@ If you want the hosted product, use [Proof](https://proofeditor.ai). Hosted Proo
 
 ## What This Fork Changes
 
-This fork is collecting changes that make local development more predictable
-after a fresh clone.
+This fork is collecting changes that make local development and codebase
+navigation more predictable.
 
 ### 1. Local Development Works After a Fresh Clone
 
@@ -49,3 +49,15 @@ existing pill-button styling. `buildMarkdownToolbarMenu` exposes the dropdown
 as a pure factory that reads Milkdown commands from the editor context; the
 mark-selection-bar mounts and tears it down with its own lifecycle, so the menu
 cannot outlive a hidden bar and the topbar carries no toolbar wiring.
+
+### 4. Architecture Map Helps LLMs Avoid Duplication
+
+Problem: It is hard for an LLM to quickly understand a codebase this size. When
+ownership boundaries, data flow, and public surfaces are not obvious, an LLM can
+solve the same problem in a second place, add duplicate concepts, or reach into
+the wrong module.
+
+Fix: `ARCHITECTURE.md` now acts as an L0 map for the repo. It summarizes the
+workspace layout, module ownership, required boundaries, local development
+shape, build shape, and the core rules an LLM should preserve before changing
+code.

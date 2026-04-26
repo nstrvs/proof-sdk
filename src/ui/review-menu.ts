@@ -7,15 +7,15 @@
  */
 
 import { getSkillsRegistry, type Skill } from '../agent/skills/registry';
+import { attachDismissibleMenu } from './dismissible-menu';
 
 // ============================================================================
 // Types
 // ============================================================================
 
 interface ReviewMenuState {
-  isOpen: boolean;
   element: HTMLElement | null;
-  anchorElement: HTMLElement | null;
+  detach: (() => void) | null;
 }
 
 interface ReviewMenuCallbacks {
@@ -29,9 +29,8 @@ interface ReviewMenuCallbacks {
 // ============================================================================
 
 const state: ReviewMenuState = {
-  isOpen: false,
   element: null,
-  anchorElement: null,
+  detach: null,
 };
 
 let callbacks: ReviewMenuCallbacks = {
@@ -44,7 +43,7 @@ let callbacks: ReviewMenuCallbacks = {
 
 function createMenuElement(hasSelection: boolean): HTMLElement {
   const menu = document.createElement('div');
-  menu.className = 'review-menu';
+  menu.className = 'review-menu proof-dropdown';
 
   const registry = getSkillsRegistry();
   const skills = registry.getAllSkills();
@@ -94,15 +93,6 @@ function createMenuElement(hasSelection: boolean): HTMLElement {
         min-width: 220px;
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         font-size: 13px;
-        opacity: 0;
-        transform: scale(0.95);
-        transform-origin: top left;
-        transition: opacity 0.1s ease, transform 0.1s ease;
-      }
-
-      .review-menu.visible {
-        opacity: 1;
-        transform: scale(1);
       }
 
       .review-menu-header {
@@ -264,28 +254,6 @@ function positionMenu(menu: HTMLElement, anchor: HTMLElement): void {
 }
 
 // ============================================================================
-// Event Handlers
-// ============================================================================
-
-function handleKeyDown(e: KeyboardEvent): void {
-  if (!state.isOpen) return;
-
-  if (e.key === 'Escape') {
-    closeReviewMenu();
-    e.preventDefault();
-    e.stopPropagation();
-  }
-}
-
-function handleClickOutside(e: MouseEvent): void {
-  if (!state.isOpen || !state.element) return;
-
-  if (!state.element.contains(e.target as Node)) {
-    closeReviewMenu();
-  }
-}
-
-// ============================================================================
 // Public API
 // ============================================================================
 
@@ -297,25 +265,14 @@ export function showReviewMenu(
   hasSelection: boolean,
   options: ReviewMenuCallbacks
 ): void {
-  // Close any existing menu
-  if (state.isOpen) {
-    closeReviewMenu();
-  }
+  closeReviewMenu();
 
   callbacks = options;
 
-  // Create and position menu
   const menu = createMenuElement(hasSelection);
   state.element = menu;
-  state.anchorElement = anchor;
-  state.isOpen = true;
 
   positionMenu(menu, anchor);
-
-  // Animate in
-  requestAnimationFrame(() => {
-    menu.classList.add('visible');
-  });
 
   // Wire up skill buttons
   const skillButtons = menu.querySelectorAll('.review-menu-skill');
@@ -352,37 +309,24 @@ export function showReviewMenu(
     }
   });
 
-  // Global event listeners
-  document.addEventListener('keydown', handleKeyDown, true);
-  document.addEventListener('mousedown', handleClickOutside, true);
+  state.detach = attachDismissibleMenu({
+    container: menu,
+    openClassTarget: menu,
+    openClass: 'proof-dropdown--open',
+    exitDuration: 100,
+    onDismiss: () => {
+      if (menu.parentNode) menu.parentNode.removeChild(menu);
+      state.element = null;
+      state.detach = null;
+    },
+  });
 }
 
 /**
  * Close the review menu
  */
 export function closeReviewMenu(): void {
-  if (!state.element) return;
-
-  state.element.classList.remove('visible');
-
-  setTimeout(() => {
-    if (state.element && state.element.parentNode) {
-      state.element.parentNode.removeChild(state.element);
-    }
-    state.element = null;
-    state.anchorElement = null;
-    state.isOpen = false;
-  }, 100);
-
-  document.removeEventListener('keydown', handleKeyDown, true);
-  document.removeEventListener('mousedown', handleClickOutside, true);
-}
-
-/**
- * Check if menu is open
- */
-export function isReviewMenuOpen(): boolean {
-  return state.isOpen;
+  state.detach?.();
 }
 
 /**
@@ -454,6 +398,5 @@ export function createReviewButton(
 export default {
   showReviewMenu,
   closeReviewMenu,
-  isReviewMenuOpen,
   createReviewButton,
 };

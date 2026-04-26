@@ -6,16 +6,16 @@
  */
 
 import type { AgentInputContext, AgentInputCallbacks } from '../editor/plugins/keybindings';
+import { attachDismissibleMenu } from './dismissible-menu';
 
 // ============================================================================
 // Types
 // ============================================================================
 
 interface DialogState {
-  isOpen: boolean;
-  context: AgentInputContext | null;
   callbacks: AgentInputCallbacks | null;
   element: HTMLElement | null;
+  detach: (() => void) | null;
 }
 
 // ============================================================================
@@ -23,10 +23,9 @@ interface DialogState {
 // ============================================================================
 
 const state: DialogState = {
-  isOpen: false,
-  context: null,
   callbacks: null,
   element: null,
+  detach: null,
 };
 
 // ============================================================================
@@ -296,28 +295,6 @@ function positionDialog(dialog: HTMLElement, position: { top: number; left: numb
 // Event Handlers
 // ============================================================================
 
-function handleKeyDown(e: KeyboardEvent): void {
-  if (!state.isOpen) return;
-
-  if (e.key === 'Escape') {
-    closeDialog();
-    e.preventDefault();
-    e.stopPropagation();
-  } else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-    submitDialog();
-    e.preventDefault();
-    e.stopPropagation();
-  }
-}
-
-function handleClickOutside(e: MouseEvent): void {
-  if (!state.isOpen || !state.element) return;
-
-  if (!state.element.contains(e.target as Node)) {
-    closeDialog();
-  }
-}
-
 function submitDialog(): void {
   if (!state.element || !state.callbacks) return;
 
@@ -332,23 +309,7 @@ function submitDialog(): void {
 }
 
 function closeDialog(): void {
-  if (!state.element) return;
-
-  state.element.classList.remove('visible');
-
-  setTimeout(() => {
-    if (state.element && state.element.parentNode) {
-      state.element.parentNode.removeChild(state.element);
-    }
-    state.element = null;
-    state.isOpen = false;
-    state.context = null;
-    state.callbacks?.onCancel();
-    state.callbacks = null;
-  }, 150);
-
-  document.removeEventListener('keydown', handleKeyDown, true);
-  document.removeEventListener('mousedown', handleClickOutside, true);
+  state.detach?.();
 }
 
 // ============================================================================
@@ -362,16 +323,10 @@ export function showAgentInputDialog(
   context: AgentInputContext,
   callbacks: AgentInputCallbacks
 ): void {
-  // Close any existing dialog
-  if (state.isOpen) {
-    closeDialog();
-  }
+  closeDialog();
 
-  // Create new dialog
   const dialog = createDialogElement();
   state.element = dialog;
-  state.isOpen = true;
-  state.context = context;
   state.callbacks = callbacks;
 
   // Show selection if there is one
@@ -424,9 +379,31 @@ export function showAgentInputDialog(
     });
   });
 
-  // Global event listeners
-  document.addEventListener('keydown', handleKeyDown, true);
-  document.addEventListener('mousedown', handleClickOutside, true);
+  state.detach = attachDismissibleMenu({
+    container: dialog,
+    onKeyDown: (e) => {
+      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+        submitDialog();
+        e.preventDefault();
+        e.stopPropagation();
+        return true;
+      }
+    },
+    onDismiss: () => {
+      dialog.classList.remove('visible');
+      const element = state.element;
+      const callbacks = state.callbacks;
+      setTimeout(() => {
+        if (element && element.parentNode) {
+          element.parentNode.removeChild(element);
+        }
+      }, 150);
+      state.element = null;
+      callbacks?.onCancel();
+      state.callbacks = null;
+      state.detach = null;
+    },
+  });
 }
 
 /**
@@ -434,11 +411,4 @@ export function showAgentInputDialog(
  */
 export function hideAgentInputDialog(): void {
   closeDialog();
-}
-
-/**
- * Check if dialog is currently open
- */
-export function isAgentInputDialogOpen(): boolean {
-  return state.isOpen;
 }

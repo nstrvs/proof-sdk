@@ -182,6 +182,7 @@ import { tableKeyboardPlugin } from './plugins/table-keyboard';
 import { showAgentInputDialog } from '../ui/agent-input-dialog';
 import { initContextMenu } from '../ui/context-menu';
 import { createShareBubbleButton, createShareBubbleInitial } from '../ui/share-pill-bubble';
+import { attachDismissibleMenu } from '../ui/dismissible-menu';
 import {
   initAgentNavigation,
   navigateToAgent as navigateToAgentInEditor,
@@ -1061,9 +1062,9 @@ class ProofEditorImpl implements ProofEditor {
   private preRefreshRevertTimestamp: number = 0;
   private refreshBanner: HTMLElement | null = null;
   private toastElement: HTMLElement | null = null;
-  private shareMenuCleanup: (() => void) | null = null;
-  private presenceMenuCleanup: (() => void) | null = null;
-  private agentMenuCleanup: (() => void) | null = null;
+  private shareMenuDetach: (() => void) | null = null;
+  private presenceMenuDetach: (() => void) | null = null;
+  private agentMenuDetach: (() => void) | null = null;
   private shareWelcomeToast: HTMLElement | null = null;
   private shareDocTitle: string = 'Untitled';
   private shareBannerTitleEl: HTMLElement | null = null;
@@ -3081,7 +3082,7 @@ class ProofEditorImpl implements ProofEditor {
           transform: none !important;
           min-width: unset !important;
           max-width: unset !important;
-          padding: 8px 10px 8px 14px !important;
+          padding: 5px 9px 5px 11px !important;
           gap: 8px !important;
           top: 16px !important;
         }
@@ -3172,19 +3173,21 @@ class ProofEditorImpl implements ProofEditor {
     const openPresenceMenu = () => {
       this.closeShareMenu();
       this.closeAgentMenu();
-      if (this.presenceMenuCleanup) {
+      if (this.presenceMenuDetach) {
         this.closePresenceMenu();
         return;
       }
 
       const menu = document.createElement('div');
       menu.setAttribute('role', 'menu');
+      menu.className = 'proof-dropdown';
       menu.style.cssText = `
         position:absolute;top:calc(100% + 8px);right:0;min-width:190px;
         background:rgba(17,24,39,0.96);border:1px solid rgba(255,255,255,0.12);
         border-radius:12px;padding:8px;z-index:1002;
         box-shadow:0 16px 40px rgba(0,0,0,0.35);
         backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+        --proof-dropdown-origin: top right;
       `;
 
       const header = document.createElement('div');
@@ -3209,23 +3212,16 @@ class ProofEditorImpl implements ProofEditor {
       container.appendChild(menu);
       this.clampMenuToViewport(menu);
 
-      const onDocMouseDown = (ev: MouseEvent) => {
-        if (!(ev.target instanceof Node)) return;
-        if (container.contains(ev.target)) return;
-        cleanup();
-      };
-      const onKeyDown = (ev: KeyboardEvent) => {
-        if (ev.key === 'Escape') cleanup();
-      };
-      const cleanup = () => {
-        document.removeEventListener('mousedown', onDocMouseDown, true);
-        document.removeEventListener('keydown', onKeyDown, true);
-        if (menu.isConnected) menu.remove();
-        if (this.presenceMenuCleanup === cleanup) this.presenceMenuCleanup = null;
-      };
-      this.presenceMenuCleanup = cleanup;
-      document.addEventListener('mousedown', onDocMouseDown, true);
-      document.addEventListener('keydown', onKeyDown, true);
+      this.presenceMenuDetach = attachDismissibleMenu({
+        container,
+        openClassTarget: menu,
+        openClass: 'proof-dropdown--open',
+        exitDuration: 100,
+        onDismiss: () => {
+          if (menu.isConnected) menu.remove();
+          this.presenceMenuDetach = null;
+        },
+      });
     };
 
     container.onclick = openPresenceMenu;
@@ -3818,24 +3814,15 @@ class ProofEditorImpl implements ProofEditor {
   }
 
   private closeShareMenu(): void {
-    if (!this.shareMenuCleanup) return;
-    const cleanup = this.shareMenuCleanup;
-    this.shareMenuCleanup = null;
-    cleanup();
+    this.shareMenuDetach?.();
   }
 
   private closePresenceMenu(): void {
-    if (!this.presenceMenuCleanup) return;
-    const cleanup = this.presenceMenuCleanup;
-    this.presenceMenuCleanup = null;
-    cleanup();
+    this.presenceMenuDetach?.();
   }
 
   private closeAgentMenu(): void {
-    if (!this.agentMenuCleanup) return;
-    const cleanup = this.agentMenuCleanup;
-    this.agentMenuCleanup = null;
-    cleanup();
+    this.agentMenuDetach?.();
   }
 
   private clampMenuToViewport(menu: HTMLElement): void {
@@ -4051,19 +4038,21 @@ class ProofEditorImpl implements ProofEditor {
     const openMenu = () => {
       this.closeAgentMenu();
       this.closePresenceMenu();
-      if (this.shareMenuCleanup) {
+      if (this.shareMenuDetach) {
         this.closeShareMenu();
         return;
       }
 
       const menu = document.createElement('div');
       menu.setAttribute('role', 'menu');
+      menu.className = 'proof-dropdown';
       menu.style.cssText = `
         position:absolute;top:calc(100% + 8px);right:0;min-width:240px;
         background:rgba(17,24,39,0.96);border:1px solid rgba(255,255,255,0.12);
         border-radius:12px;padding:6px;z-index:1002;
         box-shadow:0 16px 40px rgba(0,0,0,0.35);
         backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+        --proof-dropdown-origin: top right;
       `;
 
       const addItem = (title: string, onSelect: (itemLabel: HTMLSpanElement) => Promise<boolean> | boolean, opts?: { subtle?: boolean; disabled?: boolean }) => {
@@ -4096,7 +4085,7 @@ class ProofEditorImpl implements ProofEditor {
           const ok = await onSelect(left);
           right.textContent = ok ? 'Copied' : 'Failed';
           if (ok) {
-            setTimeout(() => cleanup(), 700);
+            setTimeout(() => this.shareMenuDetach?.(), 700);
           } else {
             setTimeout(() => { right.textContent = ''; }, 1200);
           }
@@ -4132,7 +4121,7 @@ class ProofEditorImpl implements ProofEditor {
         item.onclick = () => {
           if (opts?.disabled) return;
           onSelect();
-          cleanup();
+          this.shareMenuDetach?.();
         };
         menu.appendChild(item);
       };
@@ -4150,27 +4139,16 @@ class ProofEditorImpl implements ProofEditor {
       container.appendChild(menu);
       this.clampMenuToViewport(menu);
 
-      const onDocMouseDown = (ev: MouseEvent) => {
-        if (!(ev.target instanceof Node)) return;
-        if (container.contains(ev.target)) return;
-        cleanup();
-      };
-      const onKeyDown = (ev: KeyboardEvent) => {
-        if (ev.key === 'Escape') cleanup();
-      };
-
-      const cleanup = () => {
-        document.removeEventListener('mousedown', onDocMouseDown, true);
-        document.removeEventListener('keydown', onKeyDown, true);
-        if (menu.isConnected) menu.remove();
-        if (this.shareMenuCleanup === cleanup) {
-          this.shareMenuCleanup = null;
-        }
-      };
-
-      this.shareMenuCleanup = cleanup;
-      document.addEventListener('mousedown', onDocMouseDown, true);
-      document.addEventListener('keydown', onKeyDown, true);
+      this.shareMenuDetach = attachDismissibleMenu({
+        container,
+        openClassTarget: menu,
+        openClass: 'proof-dropdown--open',
+        exitDuration: 100,
+        onDismiss: () => {
+          if (menu.isConnected) menu.remove();
+          this.shareMenuDetach = null;
+        },
+      });
     };
 
     btn.onclick = () => {
@@ -4350,21 +4328,21 @@ class ProofEditorImpl implements ProofEditor {
     const openMenu = () => {
       this.closeShareMenu();
       this.closePresenceMenu();
-      if (this.agentMenuCleanup) {
+      if (this.agentMenuDetach) {
         this.closeAgentMenu();
         return;
       }
-      container.classList.add('menu-open');
-      btn.setAttribute('aria-expanded', 'true');
 
       const menu = document.createElement('div');
       menu.setAttribute('role', 'menu');
+      menu.className = 'proof-dropdown';
       menu.style.cssText = `
         position:absolute;top:calc(100% + 8px);right:0;min-width:280px;max-width:min(360px, calc(100vw - 24px));
         background:rgba(17,24,39,0.96);border:1px solid rgba(255,255,255,0.12);
         border-radius:12px;padding:8px;z-index:1002;
         box-shadow:0 16px 40px rgba(0,0,0,0.35);
         backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+        --proof-dropdown-origin: top right;
       `;
 
       const addDivider = () => {
@@ -4411,7 +4389,7 @@ class ProofEditorImpl implements ProofEditor {
           const ok = await onSelect();
           right.textContent = ok ? (options?.successText ?? 'Done') : (options?.failureText ?? 'Failed');
           if (ok) {
-            setTimeout(() => cleanup(), 400);
+            setTimeout(() => this.agentMenuDetach?.(), 400);
           } else {
             setTimeout(() => { right.textContent = ''; }, 1200);
           }
@@ -4496,7 +4474,7 @@ class ProofEditorImpl implements ProofEditor {
               row.remove();
               this.updateShareBannerPresenceDisplay();
               this.updateShareBannerAgentControlDisplay();
-              if (!menu.querySelector('[data-agent-row]')) cleanup();
+              if (!menu.querySelector('[data-agent-row]')) this.agentMenuDetach?.();
             };
             right.appendChild(disconnect);
           }
@@ -4512,25 +4490,21 @@ class ProofEditorImpl implements ProofEditor {
 
       container.appendChild(menu);
       this.clampMenuToViewport(menu);
-      const onDocMouseDown = (ev: MouseEvent) => {
-        if (!(ev.target instanceof Node)) return;
-        if (container.contains(ev.target)) return;
-        cleanup();
-      };
-      const onKeyDown = (ev: KeyboardEvent) => {
-        if (ev.key === 'Escape') cleanup();
-      };
-      const cleanup = () => {
-        container.classList.remove('menu-open');
-        btn.setAttribute('aria-expanded', 'false');
-        document.removeEventListener('mousedown', onDocMouseDown, true);
-        document.removeEventListener('keydown', onKeyDown, true);
-        if (menu.isConnected) menu.remove();
-        if (this.agentMenuCleanup === cleanup) this.agentMenuCleanup = null;
-      };
-      this.agentMenuCleanup = cleanup;
-      document.addEventListener('mousedown', onDocMouseDown, true);
-      document.addEventListener('keydown', onKeyDown, true);
+
+      requestAnimationFrame(() => menu.classList.add('proof-dropdown--open'));
+
+      this.agentMenuDetach = attachDismissibleMenu({
+        container,
+        trigger: btn,
+        openClassTarget: container,
+        openClass: 'menu-open',
+        beforeDismiss: () => menu.classList.remove('proof-dropdown--open'),
+        exitDuration: 100,
+        onDismiss: () => {
+          if (menu.isConnected) menu.remove();
+          this.agentMenuDetach = null;
+        },
+      });
     };
 
     btn.onclick = () => {
@@ -4578,8 +4552,8 @@ class ProofEditorImpl implements ProofEditor {
       -webkit-backdrop-filter: blur(16px);
       color: #374151;
       border: 1px solid rgba(0,0,0,0.06);
-      border-radius: 28px;
-      padding: 10px 12px 10px 22px;
+      border-radius: 16px;
+      padding: 5px 9px 5px 11px;
       font-size: 13px;
       font-weight: 400;
       z-index: 1000;

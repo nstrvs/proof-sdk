@@ -12,6 +12,7 @@ import { isMobileTouch } from './mobile-detect';
 import { shouldUseCommentUiV2 } from './comment-ui-mode';
 import { canCommentInRuntime } from './share-permissions';
 import { buildMarkdownToolbarMenu } from './markdown-toolbar';
+import { attachDismissibleMenu } from '../../ui/dismissible-menu';
 
 const markSelectionBarKey = new PluginKey('mark-selection-bar');
 const CACHED_RANGE_TTL_MS = 12_000;
@@ -121,7 +122,7 @@ class MarkSelectionBarController {
   private cachedAt = 0;
   private preserveCollapsedUntil = 0;
   private hintTimer: number | null = null;
-  private formatMenuCleanup: (() => void) | null = null;
+  private formatMenuDetach: (() => void) | null = null;
 
   private handleScroll = () => {
     if (this.lastRange) {
@@ -130,7 +131,7 @@ class MarkSelectionBarController {
   };
 
   private handleSelectionChange = () => {
-    if (this.formatMenuCleanup) return;
+    if (this.formatMenuDetach) return;
     this.cacheLiveSelection();
   };
 
@@ -182,7 +183,7 @@ class MarkSelectionBarController {
   }
 
   destroy(): void {
-    this.closeFormatMenu();
+    this.formatMenuDetach?.();
     document.removeEventListener('selectionchange', this.handleSelectionChange);
     this.view.dom.removeEventListener('pointerup', this.handlePointerUp);
     this.view.dom.removeEventListener('keyup', this.handleKeyUp);
@@ -199,13 +200,13 @@ class MarkSelectionBarController {
   update(view: EditorView): void {
     this.view = view;
     if (!canCommentInRuntime()) {
-      this.closeFormatMenu();
+      this.formatMenuDetach?.();
       this.bar.style.display = 'none';
       this.hintEl.style.display = 'none';
       return;
     }
     if (isMobileTouch() && shouldUseCommentUiV2()) {
-      this.closeFormatMenu();
+      this.formatMenuDetach?.();
       this.bar.style.display = 'none';
       this.hintEl.style.display = 'none';
       return;
@@ -228,7 +229,7 @@ class MarkSelectionBarController {
         return;
       }
       this.lastRange = null;
-      this.closeFormatMenu();
+      this.formatMenuDetach?.();
       this.bar.style.display = 'none';
       return;
     }
@@ -365,42 +366,28 @@ class MarkSelectionBarController {
   }
 
   private toggleFormatMenu(wrapper: HTMLElement): void {
-    if (this.formatMenuCleanup) {
-      this.closeFormatMenu();
+    if (this.formatMenuDetach) {
+      this.formatMenuDetach();
       return;
     }
-    const button = wrapper.querySelector('button');
-    const menu = buildMarkdownToolbarMenu(this.view, this.ctx, () => this.closeFormatMenu());
+    const button = wrapper.querySelector('button') as HTMLElement | null;
+    const menu = buildMarkdownToolbarMenu(this.view, this.ctx, () => this.formatMenuDetach?.());
     menu.addEventListener('pointerdown', () => {
       this.preserveBarDuringInteraction();
     });
     wrapper.appendChild(menu);
-    button?.setAttribute('aria-expanded', 'true');
 
-    const onDocMouseDown = (event: MouseEvent) => {
-      if (!(event.target instanceof Node)) return;
-      if (wrapper.contains(event.target)) return;
-      this.closeFormatMenu();
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') this.closeFormatMenu();
-    };
-    document.addEventListener('mousedown', onDocMouseDown, true);
-    document.addEventListener('keydown', onKeyDown, true);
-
-    this.formatMenuCleanup = () => {
-      document.removeEventListener('mousedown', onDocMouseDown, true);
-      document.removeEventListener('keydown', onKeyDown, true);
-      if (menu.isConnected) menu.remove();
-      button?.setAttribute('aria-expanded', 'false');
-    };
-  }
-
-  private closeFormatMenu(): void {
-    if (!this.formatMenuCleanup) return;
-    const cleanup = this.formatMenuCleanup;
-    this.formatMenuCleanup = null;
-    cleanup();
+    this.formatMenuDetach = attachDismissibleMenu({
+      container: wrapper,
+      trigger: button,
+      openClassTarget: menu,
+      openClass: 'proof-dropdown--open',
+      exitDuration: 100,
+      onDismiss: () => {
+        if (menu.isConnected) menu.remove();
+        this.formatMenuDetach = null;
+      },
+    });
   }
 }
 

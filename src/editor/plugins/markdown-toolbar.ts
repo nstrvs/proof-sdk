@@ -139,7 +139,7 @@ function buildSections(ctx: Ctx, active: ActiveState): ToolbarSection[] {
 
 export function buildMarkdownToolbarMenu(view: EditorView, ctx: Ctx, close: () => void): HTMLDivElement {
   const menu = document.createElement('div');
-  menu.className = 'markdown-toolbar-menu';
+  menu.className = 'markdown-toolbar-menu proof-dropdown';
   menu.setAttribute('role', 'menu');
 
   const sections = buildSections(ctx, computeActiveState(view));

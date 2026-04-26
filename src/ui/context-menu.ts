@@ -13,13 +13,13 @@ import { comment as addComment } from '../editor/plugins/marks';
 import { getCurrentActor } from '../editor/actor';
 import type { AgentInputContext } from '../editor/plugins/keybindings';
 import { getTextForRange } from '../editor/utils/text-range';
+import { attachDismissibleMenu } from './dismissible-menu';
 
 // ============================================================================
 // Types
 // ============================================================================
 
 interface ContextMenuState {
-  isOpen: boolean;
   element: HTMLElement | null;
   editorView: EditorView | null;
   selectionContext: {
@@ -27,6 +27,7 @@ interface ContextMenuState {
     from: number;
     to: number;
   } | null;
+  detach: (() => void) | null;
 }
 
 type QuickAction = 'fix-grammar' | 'improve-clarity' | 'make-shorter';
@@ -36,10 +37,10 @@ type QuickAction = 'fix-grammar' | 'improve-clarity' | 'make-shorter';
 // ============================================================================
 
 const state: ContextMenuState = {
-  isOpen: false,
   element: null,
   editorView: null,
   selectionContext: null,
+  detach: null,
 };
 
 // ============================================================================
@@ -48,7 +49,7 @@ const state: ContextMenuState = {
 
 function createMenuElement(): HTMLElement {
   const menu = document.createElement('div');
-  menu.className = 'proof-context-menu';
+  menu.className = 'proof-context-menu proof-dropdown';
   menu.innerHTML = `
     <div class="proof-context-menu-items">
       <button class="proof-context-menu-item" data-action="ask-proof">
@@ -97,15 +98,6 @@ function createMenuElement(): HTMLElement {
         font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         font-size: 13px;
         padding: 4px 0;
-        opacity: 0;
-        transform: scale(0.95);
-        transform-origin: top left;
-        transition: opacity 0.1s ease, transform 0.1s ease;
-      }
-
-      .proof-context-menu.visible {
-        opacity: 1;
-        transform: scale(1);
       }
 
       .proof-context-menu-items {
@@ -177,13 +169,14 @@ function createMenuElement(): HTMLElement {
         opacity: 0;
         visibility: hidden;
         transform: translateX(-8px);
-        transition: opacity 0.1s ease, transform 0.1s ease, visibility 0.1s;
+        transition: var(--proof-dropdown-exit), visibility var(--proof-dropdown-duration-exit);
       }
 
       .proof-context-menu-item.has-submenu:hover .proof-context-submenu {
         opacity: 1;
         visibility: visible;
         transform: translateX(0);
+        transition: var(--proof-dropdown-enter), visibility 0s;
       }
 
       /* Dark mode support */
@@ -246,24 +239,6 @@ function positionMenu(menu: HTMLElement, x: number, y: number): void {
 // ============================================================================
 // Event Handlers
 // ============================================================================
-
-function handleKeyDown(e: KeyboardEvent): void {
-  if (!state.isOpen) return;
-
-  if (e.key === 'Escape') {
-    closeMenu();
-    e.preventDefault();
-    e.stopPropagation();
-  }
-}
-
-function handleClickOutside(e: MouseEvent): void {
-  if (!state.isOpen || !state.element) return;
-
-  if (!state.element.contains(e.target as Node)) {
-    closeMenu();
-  }
-}
 
 function handleAction(action: string): void {
   if (!state.editorView || !state.selectionContext) return;
@@ -341,12 +316,8 @@ export function showContextMenu(
   x: number,
   y: number
 ): void {
-  // Close any existing menu
-  if (state.isOpen) {
-    closeMenu();
-  }
+  closeMenu();
 
-  // Get selection context
   const { from, to } = view.state.selection;
   const selectedText = getTextForRange(view.state.doc, { from, to });
 
@@ -357,17 +328,10 @@ export function showContextMenu(
     to,
   };
 
-  // Create and position menu
   const menu = createMenuElement();
   state.element = menu;
-  state.isOpen = true;
 
   positionMenu(menu, x, y);
-
-  // Animate in
-  requestAnimationFrame(() => {
-    menu.classList.add('visible');
-  });
 
   // Disable items if no selection
   if (!selectedText.trim()) {
@@ -393,38 +357,26 @@ export function showContextMenu(
     });
   });
 
-  // Global event listeners
-  document.addEventListener('keydown', handleKeyDown, true);
-  document.addEventListener('mousedown', handleClickOutside, true);
+  state.detach = attachDismissibleMenu({
+    container: menu,
+    openClassTarget: menu,
+    openClass: 'proof-dropdown--open',
+    exitDuration: 100,
+    onDismiss: () => {
+      if (menu.parentNode) menu.parentNode.removeChild(menu);
+      state.element = null;
+      state.editorView = null;
+      state.selectionContext = null;
+      state.detach = null;
+    },
+  });
 }
 
 /**
  * Close the context menu
  */
 export function closeMenu(): void {
-  if (!state.element) return;
-
-  state.element.classList.remove('visible');
-
-  setTimeout(() => {
-    if (state.element && state.element.parentNode) {
-      state.element.parentNode.removeChild(state.element);
-    }
-    state.element = null;
-    state.isOpen = false;
-    state.editorView = null;
-    state.selectionContext = null;
-  }, 100);
-
-  document.removeEventListener('keydown', handleKeyDown, true);
-  document.removeEventListener('mousedown', handleClickOutside, true);
-}
-
-/**
- * Check if context menu is currently open
- */
-export function isContextMenuOpen(): boolean {
-  return state.isOpen;
+  state.detach?.();
 }
 
 /**

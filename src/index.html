@@ -44,6 +44,36 @@
       --heading-weight: bold;
       --heading-align: left;
       --text-align: left;
+
+      /* Shared dropdown entry/exit animation tokens.
+         Tweak duration/easing here and every menu picks it up. */
+      --proof-dropdown-duration-enter: 0.2s;
+      --proof-dropdown-duration-exit: 0.1s;
+      --proof-dropdown-ease-enter: cubic-bezier(0.16, 1, 0.3, 1);
+      --proof-dropdown-ease-exit: cubic-bezier(0.4, 0, 1, 1);
+      --proof-dropdown-enter:
+        opacity var(--proof-dropdown-duration-enter) var(--proof-dropdown-ease-enter),
+        transform var(--proof-dropdown-duration-enter) var(--proof-dropdown-ease-enter);
+      --proof-dropdown-exit:
+        opacity var(--proof-dropdown-duration-exit) var(--proof-dropdown-ease-exit),
+        transform var(--proof-dropdown-duration-exit) var(--proof-dropdown-ease-exit);
+    }
+
+    .proof-dropdown {
+      opacity: 0;
+      transform: scale(0.95);
+      transform-origin: var(--proof-dropdown-origin, top left);
+      transition: var(--proof-dropdown-exit);
+      will-change: opacity, transform;
+    }
+    .proof-dropdown.proof-dropdown--open {
+      opacity: 1;
+      transform: scale(1);
+      transition: var(--proof-dropdown-enter);
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .proof-dropdown,
+      .proof-dropdown.proof-dropdown--open { transition: none; }
     }
 
     /* Whitey Theme - Based on Typora Whitey Theme */
@@ -398,6 +428,7 @@
       box-shadow: 0 16px 40px rgba(0, 0, 0, 0.35);
       backdrop-filter: blur(10px);
       -webkit-backdrop-filter: blur(10px);
+      transform-origin: top right;
     }
 
     .markdown-toolbar-section {
