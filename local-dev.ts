@@ -44,3 +44,34 @@ export function resolveLocalServerOrigin(env: Env): string {
     : configuredHost;
   return buildHttpOrigin(host, resolveLocalServerPort(env));
 }
+
+function readNonEmptyString(value: string | undefined): string | null {
+  const trimmed = value?.trim() ?? '';
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function isEnabled(value: string | undefined): boolean {
+  const normalized = value?.trim().toLowerCase() ?? '';
+  return normalized === '1' || normalized === 'true' || normalized === 'yes' || normalized === 'on';
+}
+
+function isProductionRuntime(env: Env): boolean {
+  const normalized = (readNonEmptyString(env.PROOF_ENV) ?? readNonEmptyString(env.NODE_ENV) ?? '')
+    .toLowerCase();
+  return normalized === 'production' || normalized === 'prod';
+}
+
+export function resolveLocalEditorOrigin(env: Env): string {
+  return (readNonEmptyString(env.PROOF_EDITOR_ORIGIN)
+    ?? readNonEmptyString(env.VITE_PROOF_EDITOR_ORIGIN)
+    ?? LOCAL_EDITOR_ORIGIN).replace(/\/+$/, '');
+}
+
+export function isLocalDevEditorEnabled(env: Env): boolean {
+  return isEnabled(env.PROOF_DEV_EDITOR) && !isProductionRuntime(env);
+}
+
+export function buildLocalEditorUrl(pathAndQuery: string, env: Env): string {
+  const path = pathAndQuery.startsWith('/') ? pathAndQuery : `/${pathAndQuery}`;
+  return `${resolveLocalEditorOrigin(env)}${path}`;
+}

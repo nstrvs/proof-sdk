@@ -39,6 +39,10 @@ import {
   buildProofSdkDocumentPaths,
   buildProofSdkLinks,
 } from './proof-sdk-routes.js';
+import {
+  buildLocalEditorUrl,
+  isLocalDevEditorEnabled,
+} from '../local-dev.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -257,6 +261,28 @@ function isAgentHtmlFetch(req: Request): boolean {
   // Non-browser UA requesting HTML — likely an agent tool
   const accept = (req.header('accept') || '').toLowerCase();
   return accept.includes('text/html') || accept.includes('*/*');
+}
+
+function isBrowserHtmlFetch(req: Request): boolean {
+  const ua = (req.header('user-agent') || '').toLowerCase();
+  if (isLinkUnfurlBot(ua)) return false;
+  const looksLikeBrowser = ua.includes('mozilla')
+    || ua.includes('chrome')
+    || ua.includes('safari')
+    || ua.includes('firefox')
+    || ua.includes('edg')
+    || ua.includes('opr');
+  if (!looksLikeBrowser) return false;
+  const accept = (req.header('accept') || '').toLowerCase();
+  return !accept
+    || accept.includes('text/html')
+    || accept.includes('application/xhtml+xml')
+    || accept.includes('*/*');
+}
+
+function isLoopbackRequest(req: Request): boolean {
+  const host = (req.hostname || req.get('host') || '').replace(/^\[/, '').replace(/\]$/, '').toLowerCase();
+  return host === 'localhost' || host === '127.0.0.1' || host === '::1';
 }
 
 function renderAgentFriendlyHtml(
@@ -590,6 +616,14 @@ shareWebRoutes.get('/d/:slug', (req: Request, res: Response) => {
         doc ? isCanonicalReadMutationReady(doc) : false,
       ),
     );
+    return;
+  }
+
+  if (isLocalDevEditorEnabled(process.env) && isLoopbackRequest(req) && isBrowserHtmlFetch(req)) {
+    if (doc) {
+      recordShareLinkOpen('success', `LOCAL_DEV_EDITOR_${doc.share_state}`);
+    }
+    res.redirect(302, buildLocalEditorUrl(req.originalUrl || req.url, process.env));
     return;
   }
 

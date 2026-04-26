@@ -263,6 +263,14 @@ export class ShareClient {
     return this.clientId;
   }
 
+  hasShareAuth(): boolean {
+    return Boolean(this.shareToken?.trim() || this.everySessionToken?.trim());
+  }
+
+  hasWebSocketAuth(): boolean {
+    return Boolean(this.shareToken?.trim());
+  }
+
   setViewerName(name: string): void {
     this.viewerName = name;
   }

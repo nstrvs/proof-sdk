@@ -43,13 +43,16 @@ npm run dev
 
 Editor UI runs at `http://localhost:3000`.
 
-Start the local server:
+Start the local server in another terminal:
 
 ```bash
 npm run serve
 ```
 
 API, collaboration, agent docs, and server-rendered routes run at `http://localhost:4000`.
+When you open a shared document in a browser from the server, the local server
+hands the live editor view to Vite on port 3000. You do not need to run
+`npm run build` during local development.
 
 ## Core Routes
 
@@ -73,13 +76,14 @@ Canonical Proof SDK routes:
 
 Compatibility aliases remain mounted for the hosted product, but the routes above are the public SDK surface.
 
-## Build
+## Production Build
 
 ```bash
 npm run build
 ```
 
-The build outputs the web bundle to `dist/` and writes `dist/web-artifact-manifest.json`.
+The build is only needed for production or embeddable web bundle artifacts. It
+outputs the web bundle to `dist/` and writes `dist/web-artifact-manifest.json`.
 
 ## Tests
 

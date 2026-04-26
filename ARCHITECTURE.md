@@ -62,6 +62,13 @@ proof-sdk/
   scripts/         — finalize-web-build.mjs (writes manifest)
 ```
 
+Local development:
+
+- editor: `npm run dev` starts Vite on `http://localhost:3000`
+- server: `npm run serve` starts `tsx server/index.ts` on `http://localhost:4000`
+- browser `/d/:slug` views opened through the local server redirect to the Vite editor; agents, JSON, markdown, and server routes stay on the server
+- no frontend build is required for the local feedback loop
+
 Build:
 
 - frontend: `vite build` over [src/index.html](src/index.html), output to `dist/`

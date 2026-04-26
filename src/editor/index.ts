@@ -2527,8 +2527,12 @@ class ProofEditorImpl implements ProofEditor {
         this.handleShareWebSocketMessage(message);
       });
     }
-    shareClient.connectWebSocket();
-    this.startShareEventPoll();
+    if (shareClient.hasWebSocketAuth()) {
+      shareClient.connectWebSocket();
+    }
+    if (shareClient.hasShareAuth()) {
+      this.startShareEventPoll();
+    }
   }
 
   private handleShareWebSocketMessage(message: Record<string, unknown>): void {
@@ -2618,10 +2622,12 @@ class ProofEditorImpl implements ProofEditor {
 
   private startShareEventPoll(): void {
     if (!this.isShareMode) return;
+    if (!shareClient.hasShareAuth()) return;
     if (this.shareEventPollTimer) return;
     const tick = async (): Promise<void> => {
       this.shareEventPollTimer = null;
       if (!this.isShareMode) return;
+      if (!shareClient.hasShareAuth()) return;
       if (this.shareEventPollInFlight) {
         this.shareEventPollTimer = setTimeout(() => { void tick(); }, this.shareEventPollMs);
         return;
@@ -2641,7 +2647,7 @@ class ProofEditorImpl implements ProofEditor {
         // best-effort fallback for cross-instance refresh signals
       } finally {
         this.shareEventPollInFlight = false;
-        if (this.isShareMode) {
+        if (this.isShareMode && shareClient.hasShareAuth()) {
           this.shareEventPollTimer = setTimeout(() => { void tick(); }, this.shareEventPollMs);
         }
       }
