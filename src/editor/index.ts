@@ -26,7 +26,6 @@ import { collab, collabServiceCtx } from '@milkdown/plugin-collab';
 import { listener, listenerCtx } from '@milkdown/kit/plugin/listener';
 import { cursor } from '@milkdown/kit/plugin/cursor';
 import { clipboard } from '@milkdown/kit/plugin/clipboard';
-import { nord } from '@milkdown/theme-nord';
 import {
   yCursorPlugin,
   yCursorPluginKey,
@@ -1174,7 +1173,6 @@ class ProofEditorImpl implements ProofEditor {
         ctx.set(rootCtx, root);
         ctx.set(defaultValueCtx, '');
       })
-      .config(nord)
       .use(commonmark)
       .use(gfm)
       // Frontmatter must be registered after commonmark so remark-frontmatter
@@ -4862,6 +4860,12 @@ class ProofEditorImpl implements ProofEditor {
   }
 
   private applyTopChromeForMode(): void {
+    if (this.isShareMode) {
+      document.body.setAttribute('data-share-mode', 'true');
+    } else {
+      document.body.removeAttribute('data-share-mode');
+    }
+
     const toolbar = document.getElementById('toolbar');
     if (toolbar) {
       if (this.isShareMode) {
