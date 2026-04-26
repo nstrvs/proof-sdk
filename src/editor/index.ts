@@ -68,7 +68,6 @@ import {
   type CommentPopoverDraftSnapshot,
 } from './plugins/mark-popover';
 import { markSelectionBarPlugin } from './plugins/mark-selection-bar';
-import { createMarkdownToolbarButton } from './plugins/markdown-toolbar';
 import {
   shareContentFilterPlugin,
   enableShareContentFilter,
@@ -1062,7 +1061,6 @@ class ProofEditorImpl implements ProofEditor {
   private shareMenuCleanup: (() => void) | null = null;
   private presenceMenuCleanup: (() => void) | null = null;
   private agentMenuCleanup: (() => void) | null = null;
-  private toolbarMenuCleanup: (() => void) | null = null;
   private shareWelcomeToast: HTMLElement | null = null;
   private shareDocTitle: string = 'Untitled';
   private shareBannerTitleEl: HTMLElement | null = null;
@@ -3186,7 +3184,6 @@ class ProofEditorImpl implements ProofEditor {
     const openPresenceMenu = () => {
       this.closeShareMenu();
       this.closeAgentMenu();
-      this.closeToolbarMenu();
       if (this.presenceMenuCleanup) {
         this.closePresenceMenu();
         return;
@@ -3455,7 +3452,6 @@ class ProofEditorImpl implements ProofEditor {
     syncStatusInline.append(syncDot, syncLabel);
     this.updateShareBannerSyncDisplay();
 
-    const toolbarBtn = this.buildMarkdownToolbarBannerButton();
     const shareBtn = this.createShareMenuButton();
 
     banner.replaceChildren(
@@ -3466,29 +3462,9 @@ class ProofEditorImpl implements ProofEditor {
       syncStatusInline,
       avatars,
       agentSlot,
-      ...(toolbarBtn ? [toolbarBtn] : []),
       shareBtn,
     );
     this.scheduleBannerLayoutUpdate();
-  }
-
-  private buildMarkdownToolbarBannerButton(): HTMLElement | null {
-    const editor = this.editor;
-    if (!editor) return null;
-    return editor.action((ctx) => {
-      const view = ctx.get(editorViewCtx);
-      return createMarkdownToolbarButton(view, ctx, {
-        beforeOpen: () => {
-          this.triggerHaptic('selection');
-          this.closeShareMenu();
-          this.closeAgentMenu();
-          this.closePresenceMenu();
-        },
-        registerCloser: (close) => {
-          this.toolbarMenuCleanup = close;
-        },
-      });
-    });
   }
 
   private uninstallShareAgentPresenceObservers(): void {
@@ -3874,13 +3850,6 @@ class ProofEditorImpl implements ProofEditor {
     cleanup();
   }
 
-  private closeToolbarMenu(): void {
-    if (!this.toolbarMenuCleanup) return;
-    const cleanup = this.toolbarMenuCleanup;
-    this.toolbarMenuCleanup = null;
-    cleanup();
-  }
-
   private clampMenuToViewport(menu: HTMLElement): void {
     const margin = 12;
     const rect = menu.getBoundingClientRect();
@@ -4110,7 +4079,6 @@ class ProofEditorImpl implements ProofEditor {
     const openMenu = () => {
       this.closeAgentMenu();
       this.closePresenceMenu();
-      this.closeToolbarMenu();
       if (this.shareMenuCleanup) {
         this.closeShareMenu();
         return;
@@ -4430,7 +4398,6 @@ class ProofEditorImpl implements ProofEditor {
     const openMenu = () => {
       this.closeShareMenu();
       this.closePresenceMenu();
-      this.closeToolbarMenu();
       if (this.agentMenuCleanup) {
         this.closeAgentMenu();
         return;
@@ -4684,7 +4651,6 @@ class ProofEditorImpl implements ProofEditor {
     this.closeShareMenu();
     this.closePresenceMenu();
     this.closeAgentMenu();
-    this.closeToolbarMenu();
     this.shareBannerTitleEditing = false;
     this.shareBannerTitleEl = null;
     this.shareBannerAvatarsEl = null;

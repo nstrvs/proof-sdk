@@ -1,6 +1,7 @@
 import { $prose } from '@milkdown/kit/utils';
 import { Plugin, PluginKey } from '@milkdown/kit/prose/state';
 import type { EditorView } from '@milkdown/kit/prose/view';
+import type { Ctx } from '@milkdown/ctx';
 
 import { flag, suggestReplace } from './marks';
 import type { MarkRange } from './marks';
@@ -10,6 +11,7 @@ import { shouldKeepCollapsedSelectionBarVisible } from './selection-bar-visibili
 import { isMobileTouch } from './mobile-detect';
 import { shouldUseCommentUiV2 } from './comment-ui-mode';
 import { canCommentInRuntime } from './share-permissions';
+import { buildMarkdownToolbarMenu } from './markdown-toolbar';
 
 const markSelectionBarKey = new PluginKey('mark-selection-bar');
 const CACHED_RANGE_TTL_MS = 12_000;
@@ -111,6 +113,7 @@ function isRangeValid(view: EditorView, range: MarkRange | null): range is MarkR
 
 class MarkSelectionBarController {
   private view: EditorView;
+  private ctx: Ctx;
   private bar: HTMLDivElement;
   private hintEl: HTMLDivElement;
   private lastRange: MarkRange | null = null;
@@ -118,6 +121,7 @@ class MarkSelectionBarController {
   private cachedAt = 0;
   private preserveCollapsedUntil = 0;
   private hintTimer: number | null = null;
+  private formatMenuCleanup: (() => void) | null = null;
 
   private handleScroll = () => {
     if (this.lastRange) {
@@ -126,6 +130,7 @@ class MarkSelectionBarController {
   };
 
   private handleSelectionChange = () => {
+    if (this.formatMenuCleanup) return;
     this.cacheLiveSelection();
   };
 
@@ -137,8 +142,9 @@ class MarkSelectionBarController {
     this.cacheLiveSelection();
   };
 
-  constructor(view: EditorView) {
+  constructor(view: EditorView, ctx: Ctx) {
     this.view = view;
+    this.ctx = ctx;
     this.bar = document.createElement('div');
     this.bar.className = 'mark-selection-bar';
     this.bar.style.display = 'none';
@@ -176,6 +182,7 @@ class MarkSelectionBarController {
   }
 
   destroy(): void {
+    this.closeFormatMenu();
     document.removeEventListener('selectionchange', this.handleSelectionChange);
     this.view.dom.removeEventListener('pointerup', this.handlePointerUp);
     this.view.dom.removeEventListener('keyup', this.handleKeyUp);
@@ -192,11 +199,13 @@ class MarkSelectionBarController {
   update(view: EditorView): void {
     this.view = view;
     if (!canCommentInRuntime()) {
+      this.closeFormatMenu();
       this.bar.style.display = 'none';
       this.hintEl.style.display = 'none';
       return;
     }
     if (isMobileTouch() && shouldUseCommentUiV2()) {
+      this.closeFormatMenu();
       this.bar.style.display = 'none';
       this.hintEl.style.display = 'none';
       return;
@@ -219,6 +228,7 @@ class MarkSelectionBarController {
         return;
       }
       this.lastRange = null;
+      this.closeFormatMenu();
       this.bar.style.display = 'none';
       return;
     }
@@ -339,17 +349,66 @@ class MarkSelectionBarController {
       suggestReplace(this.view, quote, getCurrentActor(), replacement, range);
     });
 
+    const formatWrapper = document.createElement('span');
+    formatWrapper.style.cssText = 'position:relative;display:inline-flex;align-items:center;';
+    const formatButton = makeButton('Format', () => {
+      this.toggleFormatMenu(formatWrapper);
+    });
+    formatButton.setAttribute('aria-haspopup', 'menu');
+    formatButton.setAttribute('aria-expanded', 'false');
+    formatWrapper.appendChild(formatButton);
+
     this.bar.appendChild(commentButton);
     this.bar.appendChild(flagButton);
     this.bar.appendChild(suggestButton);
+    this.bar.appendChild(formatWrapper);
+  }
+
+  private toggleFormatMenu(wrapper: HTMLElement): void {
+    if (this.formatMenuCleanup) {
+      this.closeFormatMenu();
+      return;
+    }
+    const button = wrapper.querySelector('button');
+    const menu = buildMarkdownToolbarMenu(this.view, this.ctx, () => this.closeFormatMenu());
+    menu.addEventListener('pointerdown', () => {
+      this.preserveBarDuringInteraction();
+    });
+    wrapper.appendChild(menu);
+    button?.setAttribute('aria-expanded', 'true');
+
+    const onDocMouseDown = (event: MouseEvent) => {
+      if (!(event.target instanceof Node)) return;
+      if (wrapper.contains(event.target)) return;
+      this.closeFormatMenu();
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') this.closeFormatMenu();
+    };
+    document.addEventListener('mousedown', onDocMouseDown, true);
+    document.addEventListener('keydown', onKeyDown, true);
+
+    this.formatMenuCleanup = () => {
+      document.removeEventListener('mousedown', onDocMouseDown, true);
+      document.removeEventListener('keydown', onKeyDown, true);
+      if (menu.isConnected) menu.remove();
+      button?.setAttribute('aria-expanded', 'false');
+    };
+  }
+
+  private closeFormatMenu(): void {
+    if (!this.formatMenuCleanup) return;
+    const cleanup = this.formatMenuCleanup;
+    this.formatMenuCleanup = null;
+    cleanup();
   }
 }
 
-export const markSelectionBarPlugin = $prose(() => {
+export const markSelectionBarPlugin = $prose((ctx) => {
   return new Plugin({
     key: markSelectionBarKey,
     view(view) {
-      return new MarkSelectionBarController(view);
+      return new MarkSelectionBarController(view, ctx);
     }
   });
 });

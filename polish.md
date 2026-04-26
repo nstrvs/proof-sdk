@@ -1,0 +1,7 @@
+- content centered
+- dropdown animations
+- hover instead of click on dropdown menus (1 click instead of 2)
+- added toolbar to editor mark-selection-bar
+- editor mark-selection-bar better position
+- editor table view
+- 

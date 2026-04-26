@@ -24,11 +24,6 @@ interface ActiveState {
   block: string;
 }
 
-interface ToolbarHooks {
-  beforeOpen?: () => void;
-  registerCloser?: (close: () => void) => void;
-}
-
 interface ToolbarItem {
   label: string;
   active: boolean;
@@ -142,7 +137,7 @@ function buildSections(ctx: Ctx, active: ActiveState): ToolbarSection[] {
   ];
 }
 
-function buildMenu(ctx: Ctx, view: EditorView, close: () => void): HTMLDivElement {
+export function buildMarkdownToolbarMenu(view: EditorView, ctx: Ctx, close: () => void): HTMLDivElement {
   const menu = document.createElement('div');
   menu.className = 'markdown-toolbar-menu';
   menu.setAttribute('role', 'menu');
@@ -184,88 +179,4 @@ function buildMenu(ctx: Ctx, view: EditorView, close: () => void): HTMLDivElemen
   });
 
   return menu;
-}
-
-export function createMarkdownToolbarButton(
-  view: EditorView,
-  ctx: Ctx,
-  hooks: ToolbarHooks = {},
-): HTMLElement {
-  const container = document.createElement('div');
-  container.className = 'markdown-toolbar-btn';
-  container.style.cssText = 'position:relative;display:inline-flex;align-items:center';
-
-  const button = document.createElement('button');
-  button.type = 'button';
-  button.setAttribute('aria-label', 'Markdown formatting toolbar');
-  button.setAttribute('aria-haspopup', 'menu');
-  button.setAttribute('aria-expanded', 'false');
-  button.style.cssText = `
-    display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:44px;min-width:44px;padding:0 16px;background:#111;
-    border:none;border-radius:22px;color:#fff;font-size:13px;font-weight:600;
-    cursor:pointer;transition:background 0.15s;flex-shrink:0;font-family:inherit;
-  `;
-
-  const label = document.createElement('span');
-  label.className = 'markdown-toolbar-label';
-  label.textContent = 'Toolbar';
-  const caret = document.createElement('span');
-  caret.textContent = '▾';
-  caret.style.cssText = 'font-size:10px;opacity:0.7';
-  button.append(label, caret);
-
-  button.onmouseenter = () => {
-    button.style.background = '#333';
-  };
-  button.onmouseleave = () => {
-    button.style.background = '#111';
-  };
-
-  let cleanup: (() => void) | null = null;
-
-  const close = (): void => {
-    if (!cleanup) return;
-    const fn = cleanup;
-    cleanup = null;
-    fn();
-  };
-
-  const open = (): void => {
-    if (cleanup) {
-      close();
-      return;
-    }
-    hooks.beforeOpen?.();
-
-    const menu = buildMenu(ctx, view, () => close());
-    container.appendChild(menu);
-    button.setAttribute('aria-expanded', 'true');
-
-    const onDocMouseDown = (event: MouseEvent) => {
-      if (!(event.target instanceof Node)) return;
-      if (container.contains(event.target)) return;
-      close();
-    };
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') close();
-    };
-    document.addEventListener('mousedown', onDocMouseDown, true);
-    document.addEventListener('keydown', onKeyDown, true);
-
-    cleanup = () => {
-      document.removeEventListener('mousedown', onDocMouseDown, true);
-      document.removeEventListener('keydown', onKeyDown, true);
-      if (menu.isConnected) menu.remove();
-      button.setAttribute('aria-expanded', 'false');
-    };
-  };
-
-  button.onclick = () => {
-    open();
-  };
-
-  hooks.registerCloser?.(() => close());
-
-  container.appendChild(button);
-  return container;
 }
