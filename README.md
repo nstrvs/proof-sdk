@@ -61,3 +61,16 @@ Fix: `ARCHITECTURE.md` now acts as an L0 map for the repo. It summarizes the
 workspace layout, module ownership, required boundaries, local development
 shape, build shape, and the core rules an LLM should preserve before changing
 code.
+
+### 5. Topbar And Dropdowns Feel More Polished
+
+Problem: The share topbar and dropdown menus felt heavier than the rest of the
+editor. Content was not centered as cleanly, menus opened abruptly, and
+dropdown actions often took two clicks: one click to open the menu and another
+click to choose an item.
+
+Fix: The topbar was redesigned and tightened so the editor content can sit more
+cleanly centered. Dropdowns now share entry and exit animation tokens, and the
+menu lifecycle is centralized through dismissible menu helpers. Topbar menus can
+open on hover while still supporting click and keyboard activation, so common
+dropdown actions are faster without losing accessibility paths.
