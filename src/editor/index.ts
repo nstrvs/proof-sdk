@@ -4000,10 +4000,7 @@ class ProofEditorImpl implements ProofEditor {
 
         const left = document.createElement('span');
         left.textContent = title;
-        const right = document.createElement('span');
-        right.textContent = '›';
-        right.style.cssText = 'font-weight:700;opacity:0.8';
-        item.append(left, right);
+        item.appendChild(left);
         item.onclick = () => {
           if (opts?.disabled) return;
           onSelect();

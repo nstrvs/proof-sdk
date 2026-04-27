@@ -3,3 +3,4 @@
 - hover instead of click on dropdown menus (1 click instead of 2)
 - added toolbar to editor mark-selection-bar
 - topbar redesign
+- remove misleading icon in "share file" dropdown
