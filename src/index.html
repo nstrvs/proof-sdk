@@ -758,6 +758,21 @@
     .attestation-a4 { background-color: var(--a4-color) !important; }
 
     /* Default Theme Typography */
+    .share-doc-title {
+      display: none;
+      margin: 0 auto 0.25em;
+      padding-bottom: 7px;
+      max-width: 800px;
+      font-size: 2em;
+      font-weight: var(--heading-weight);
+      text-align: var(--heading-align);
+      line-height: 1.2;
+      color: #111827;
+      outline: none;
+    }
+    body[data-share-mode="true"] .share-doc-title { display: block; }
+    .share-doc-title:empty::before { content: 'Untitled'; color: #9ca3af; }
+
     .milkdown h1 {
       font-size: 2em;
       margin-bottom: 0.5em;

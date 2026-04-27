@@ -15,6 +15,88 @@ export interface DismissibleMenuOptions {
   exitDuration?: number;
 }
 
+export interface HoverMenuTriggerOptions {
+  container: HTMLElement;
+  trigger: HTMLElement;
+  isOpen: () => boolean;
+  open: () => void;
+  close: () => void;
+  onActivate?: () => void;
+  closeDelay?: number;
+}
+
+const hoverMenuTriggerCleanup = Symbol('proofHoverMenuTriggerCleanup');
+
+export function detachHoverMenuTrigger(trigger: HTMLElement): void {
+  (trigger as HTMLElement & { [hoverMenuTriggerCleanup]?: () => void })[hoverMenuTriggerCleanup]?.();
+}
+
+export function attachHoverMenuTrigger(opts: HoverMenuTriggerOptions): () => void {
+  const { container, trigger, isOpen, open, close, onActivate, closeDelay = 220 } = opts;
+  const cleanupTarget = trigger as HTMLElement & { [hoverMenuTriggerCleanup]?: () => void };
+  detachHoverMenuTrigger(trigger);
+  let closeTimer: number | null = null;
+
+  const clearCloseTimer = () => {
+    if (closeTimer === null) return;
+    window.clearTimeout(closeTimer);
+    closeTimer = null;
+  };
+
+  const openFromHover = () => {
+    clearCloseTimer();
+    if (isOpen()) return;
+    open();
+  };
+
+  const closeAfterLeave = () => {
+    clearCloseTimer();
+    closeTimer = window.setTimeout(() => {
+      closeTimer = null;
+      if (container.matches(':hover')) return;
+      close();
+    }, closeDelay);
+  };
+
+  const openFromClick = (event: MouseEvent) => {
+    event.preventDefault();
+    clearCloseTimer();
+    if (isOpen()) return;
+    onActivate?.();
+    open();
+  };
+
+  const toggleFromKeyboard = (event: KeyboardEvent) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    clearCloseTimer();
+    onActivate?.();
+    if (isOpen()) {
+      close();
+      return;
+    }
+    open();
+  };
+
+  container.addEventListener('mouseenter', openFromHover);
+  container.addEventListener('mouseleave', closeAfterLeave);
+  trigger.addEventListener('click', openFromClick);
+  trigger.addEventListener('keydown', toggleFromKeyboard);
+
+  const detach = () => {
+    clearCloseTimer();
+    container.removeEventListener('mouseenter', openFromHover);
+    container.removeEventListener('mouseleave', closeAfterLeave);
+    trigger.removeEventListener('click', openFromClick);
+    trigger.removeEventListener('keydown', toggleFromKeyboard);
+    if (cleanupTarget[hoverMenuTriggerCleanup] === detach) {
+      delete cleanupTarget[hoverMenuTriggerCleanup];
+    }
+  };
+  cleanupTarget[hoverMenuTriggerCleanup] = detach;
+  return detach;
+}
+
 export function attachDismissibleMenu(opts: DismissibleMenuOptions): () => void {
   const { container, onDismiss, trigger, openClassTarget, openClass, onKeyDown, beforeDismiss, exitDuration } = opts;
 

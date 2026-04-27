@@ -80,3 +80,51 @@ export function createShareBubbleInitial(opts: {
     ${opts.withRing ? 'border:2px solid #fff;box-shadow:0 0 0 0.5px rgba(0,0,0,0.08);' : ''}`;
   return span;
 }
+
+export type ShareBubbleStatusKind = 'done' | 'progress' | 'error';
+
+const STATUS_DOT_COLOR: Record<ShareBubbleStatusKind, string> = {
+  done: 'rgb(52, 211, 153)',
+  progress: '#f59e0b',
+  error: '#ef4444',
+};
+
+const STATUS_DOT_STYLE = 'width:8px;height:8px;border-radius:50%;display:inline-block;flex-shrink:0;margin-top:1px;';
+const STATUS_DOT_ANIMATION = 'shareStatusPulse 1.2s ease-in-out infinite';
+const STATUS_PULSE_STYLE_ID = 'share-status-pulse-style';
+
+function ensureStatusPulseKeyframes(): void {
+  if (document.getElementById(STATUS_PULSE_STYLE_ID)) return;
+  const style = document.createElement('style');
+  style.id = STATUS_PULSE_STYLE_ID;
+  style.textContent = `
+    @keyframes shareStatusPulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.35; }
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+export function createShareBubbleStatusDot(): HTMLSpanElement {
+  ensureStatusPulseKeyframes();
+  const dot = document.createElement('span');
+  dot.style.cssText = STATUS_DOT_STYLE;
+  dot.setAttribute('role', 'status');
+  dot.setAttribute('aria-live', 'polite');
+  return dot;
+}
+
+export function applyShareBubbleStatus(
+  el: HTMLSpanElement,
+  kind: ShareBubbleStatusKind,
+  ariaLabel: string,
+): void {
+  if (el.getAttribute('aria-label') !== ariaLabel) {
+    el.setAttribute('aria-label', ariaLabel);
+  }
+  if (el.dataset.kind === kind) return;
+  el.dataset.kind = kind;
+  el.style.background = STATUS_DOT_COLOR[kind];
+  el.style.animation = kind === 'progress' ? STATUS_DOT_ANIMATION : '';
+}

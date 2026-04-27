@@ -181,8 +181,14 @@ import { keybindingsPlugin, setShowAgentInputCallback, type AgentInputContext } 
 import { tableKeyboardPlugin } from './plugins/table-keyboard';
 import { showAgentInputDialog } from '../ui/agent-input-dialog';
 import { initContextMenu } from '../ui/context-menu';
-import { createShareBubbleButton, createShareBubbleInitial } from '../ui/share-pill-bubble';
-import { attachDismissibleMenu } from '../ui/dismissible-menu';
+import {
+  createShareBubbleButton,
+  createShareBubbleInitial,
+  createShareBubbleStatusDot,
+  applyShareBubbleStatus,
+  type ShareBubbleStatusKind,
+} from '../ui/share-pill-bubble';
+import { attachDismissibleMenu, attachHoverMenuTrigger, detachHoverMenuTrigger } from '../ui/dismissible-menu';
 import {
   initAgentNavigation,
   navigateToAgent as navigateToAgentInEditor,
@@ -1067,16 +1073,12 @@ class ProofEditorImpl implements ProofEditor {
   private agentMenuDetach: (() => void) | null = null;
   private shareWelcomeToast: HTMLElement | null = null;
   private shareDocTitle: string = 'Untitled';
-  private shareBannerTitleEl: HTMLElement | null = null;
+  private shareTitleEl: HTMLElement | null = null;
   private shareBannerAvatarsEl: HTMLElement | null = null;
   private shareBannerAgentSlotEl: HTMLElement | null = null;
-  private shareBannerSyncDotEl: HTMLElement | null = null;
-  private shareBannerSyncLabelEl: HTMLElement | null = null;
-  private shareBannerTitleEditing: boolean = false;
+  private shareBannerSyncDotEl: HTMLSpanElement | null = null;
+  private shareTitleEditing: boolean = false;
   private shareTitlePersistSeq: number = 0;
-  private shareLastStatusLabel: string = '';
-  private shareStatusTextVisibleUntilMs: number = 0;
-  private shareStatusHideTimer: ReturnType<typeof setTimeout> | null = null;
   private shareWsUnsubscribe: (() => void) | null = null;
   private shareEventPollTimer: ReturnType<typeof setTimeout> | null = null;
   private shareEventPollInFlight: boolean = false;
@@ -1504,7 +1506,7 @@ class ProofEditorImpl implements ProofEditor {
         collabClient.onPresence((count) => {
           const otherCount = Math.max(0, count - 1);
           this.shareOtherViewerCount = otherCount;
-          this.updateShareBannerTitleDisplay();
+          this.updateShareTitleDisplay();
           this.updateShareBannerPresenceDisplay();
         });
         collabClient.onSyncStatus((status) => {
@@ -2519,7 +2521,8 @@ class ProofEditorImpl implements ProofEditor {
       canEdit: this.collabCanEdit,
     });
     this.updateEditableState();
-    this.updateShareBannerTitleDisplay();
+    this.ensureShareDocTitleEl();
+    this.updateShareTitleDisplay();
   }
 
   private ensureShareWebSocketConnection(): void {
@@ -2545,7 +2548,7 @@ class ProofEditorImpl implements ProofEditor {
         : (Array.isArray(message.viewers) ? message.viewers.length : 0);
       if (Number.isFinite(count)) {
         this.shareOtherViewerCount = Math.max(0, Math.floor(count) - 1);
-        this.updateShareBannerTitleDisplay();
+        this.updateShareTitleDisplay();
       }
       return;
     }
@@ -2684,7 +2687,7 @@ class ProofEditorImpl implements ProofEditor {
           this.applyShareTitle(doc.title);
           if (typeof doc.viewers === 'number') {
             this.shareOtherViewerCount = Math.max(0, Math.floor(doc.viewers) - 1);
-            this.updateShareBannerTitleDisplay();
+            this.updateShareTitleDisplay();
           }
         })
         .catch(() => {
@@ -2735,83 +2738,14 @@ class ProofEditorImpl implements ProofEditor {
     return `${otherViewerCount} viewers`;
   }
 
-  private getShareSyncStatus(): { label: string; color: string } {
-    if (!this.collabEnabled) {
-      return { label: 'Live sync unavailable', color: '#ef4444' };
-    }
+  private getShareSyncStatus(): { kind: ShareBubbleStatusKind } {
+    if (!this.collabEnabled) return { kind: 'error' };
     if (this.collabConnectionStatus === 'connected') {
-      if (!this.collabIsSynced) {
-        return { label: 'Syncing...', color: '#f59e0b' };
-      }
-      if (this.collabUnsyncedChanges > 0) {
-        return { label: 'Saving...', color: '#f59e0b' };
-      }
-      return { label: 'Saved', color: '#34d399' };
+      if (!this.collabIsSynced || this.collabUnsyncedChanges > 0) return { kind: 'progress' };
+      return { kind: 'done' };
     }
-    if (this.collabConnectionStatus === 'connecting') {
-      return { label: 'Connecting...', color: '#f59e0b' };
-    }
-    if (collabClient.terminalCloseReason === 'unshared') {
-      return { label: 'Document is no longer shared', color: '#ef4444' };
-    }
-    if (collabClient.terminalCloseReason === 'permission-denied') {
-      return { label: 'Access revoked', color: '#ef4444' };
-    }
-    if (this.collabUnsyncedChanges > 0) {
-      return { label: 'Offline - unsaved changes', color: '#ef4444' };
-    }
-    return { label: 'Offline - reconnecting', color: '#ef4444' };
-  }
-
-  private ensureShareStatusPulseStyle(): void {
-    const styleId = 'share-status-pulse-style';
-    if (document.getElementById(styleId)) return;
-    const style = document.createElement('style');
-    style.id = styleId;
-    style.textContent = `
-      @keyframes shareStatusPulse {
-        0%, 100% { opacity: 1; }
-        50% { opacity: 0.35; }
-      }
-    `;
-    document.head.appendChild(style);
-  }
-
-  private getSyncStatusTextLabel(label: string): string {
-    const map: Record<string, string> = {
-      'Saved': 'Saved',
-      'Saving...': 'Saving',
-      'Syncing...': 'Syncing',
-      'Connecting...': 'Connecting',
-      'Offline - reconnecting': 'Offline',
-      'Offline - unsaved changes': 'Unsaved',
-      'Access revoked': 'Revoked',
-      'Document is no longer shared': 'Unshared',
-      'Live sync unavailable': 'No sync',
-    };
-    return map[label] ?? 'Saved';
-  }
-
-  private shouldShowStatusText(statusLabel: string): boolean {
-    const normalized = statusLabel.trim() || 'Saved';
-    const now = Date.now();
-
-    if (normalized !== this.shareLastStatusLabel) {
-      this.shareLastStatusLabel = normalized;
-      this.shareStatusTextVisibleUntilMs = now + 3_500;
-      if (this.shareStatusHideTimer) {
-        clearTimeout(this.shareStatusHideTimer);
-        this.shareStatusHideTimer = null;
-      }
-      this.shareStatusHideTimer = setTimeout(() => {
-        this.shareStatusHideTimer = null;
-        const label = document.querySelector('#share-banner .share-pill-status-inline .status-label') as HTMLElement | null;
-        if (label) label.style.display = 'none';
-      }, 3_550);
-      return true;
-    }
-
-    return now < this.shareStatusTextVisibleUntilMs;
+    if (this.collabConnectionStatus === 'connecting') return { kind: 'progress' };
+    return { kind: 'error' };
   }
 
   private getHumanCollaboratorAvatars(): Array<{ name: string; color: string; initial: string }> {
@@ -3010,12 +2944,6 @@ class ProofEditorImpl implements ProofEditor {
         0%, 100% { box-shadow: 0 0 0 0 rgba(139, 92, 246, 0.40), 0 0 0 0.5px rgba(0,0,0,0.08); }
         50% { box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.00), 0 0 0 0.5px rgba(0,0,0,0.08); }
       }
-      #share-banner .share-pill-title {
-        min-width: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
       #share-banner .share-pill-human-avatars {
         display: inline-flex;
         align-items: center;
@@ -3023,24 +2951,6 @@ class ProofEditorImpl implements ProofEditor {
       }
       #share-banner .share-pill-agent-trigger.has-agents {
         padding: 0 4px;
-      }
-      #share-banner .share-pill-status-inline {
-        display:inline-flex;
-        align-items:center;
-        gap:6px;
-        flex-shrink:0;
-      }
-      #share-banner .share-pill-status-inline .status-label {
-        color:#6b7280;
-        font-size:11px;
-        font-weight:500;
-        line-height:1;
-      }
-      #share-banner .share-pill-status-sep {
-        width:1px;
-        height:14px;
-        background:rgba(0,0,0,0.10);
-        flex-shrink:0;
       }
       #share-banner .proof-avatar-tooltip {
         position:absolute;
@@ -3077,33 +2987,21 @@ class ProofEditorImpl implements ProofEditor {
       }
       @media (max-width: 480px) {
         #share-banner {
-          left: 12px !important;
-          right: 12px !important;
-          transform: none !important;
-          min-width: unset !important;
-          max-width: unset !important;
-          padding: 5px 9px 5px 11px !important;
+          left: 50% !important;
+          right: auto !important;
+          transform: translateX(-50%) !important;
+          min-width: 0 !important;
+          max-width: calc(100vw - 24px) !important;
+          width: fit-content !important;
+          padding: 5px 9px 5px 16px !important;
           gap: 8px !important;
           top: 16px !important;
-        }
-        #share-banner .share-pill-sep {
-          display: none !important;
-        }
-        #share-banner .share-pill-title {
-          flex: 1 1 auto !important;
-          min-width: 0 !important;
         }
         #share-banner .share-pill-human-avatars {
           display: none !important;
         }
         #share-banner .share-pill-agent-trigger.has-agents {
           padding: 0 2px !important;
-        }
-        #share-banner .share-pill-status-inline .status-label {
-          display:none !important;
-        }
-        #share-banner .share-pill-status-sep {
-          display:none !important;
         }
         #share-banner .proof-avatar-tooltip {
           display:none !important;
@@ -3122,8 +3020,11 @@ class ProofEditorImpl implements ProofEditor {
     container.replaceChildren();
 
     if (avatars.length === 0) {
+      detachHoverMenuTrigger(container);
       container.removeAttribute('role');
       container.removeAttribute('tabindex');
+      container.removeAttribute('aria-haspopup');
+      container.removeAttribute('aria-expanded');
       container.removeAttribute('aria-label');
       container.onclick = null;
       container.onkeydown = null;
@@ -3133,6 +3034,8 @@ class ProofEditorImpl implements ProofEditor {
     container.style.cursor = 'pointer';
     container.setAttribute('role', 'button');
     container.setAttribute('tabindex', '0');
+    container.setAttribute('aria-haspopup', 'menu');
+    container.setAttribute('aria-expanded', 'false');
     container.setAttribute('aria-label', `${avatars.length} collaborator${avatars.length === 1 ? '' : 's'}`);
 
     for (let i = 0; i < Math.min(avatars.length, 5); i++) {
@@ -3145,17 +3048,7 @@ class ProofEditorImpl implements ProofEditor {
         bg: avatar.color,
         withRing: true,
       });
-      const tooltip = document.createElement('span');
-      tooltip.className = 'proof-avatar-tooltip';
-      const tooltipName = document.createElement('span');
-      tooltipName.style.cssText = 'display:block;font-weight:600';
-      tooltipName.textContent = avatar.name;
-      const tooltipType = document.createElement('span');
-      tooltipType.style.cssText = 'display:block;font-size:10px;opacity:0.7;margin-top:1px';
-      tooltipType.textContent = 'Collaborator';
-      tooltip.append(tooltipName, tooltipType);
       wrap.appendChild(circle);
-      wrap.appendChild(tooltip);
       container.appendChild(wrap);
     }
     if (avatars.length > 5) {
@@ -3173,10 +3066,7 @@ class ProofEditorImpl implements ProofEditor {
     const openPresenceMenu = () => {
       this.closeShareMenu();
       this.closeAgentMenu();
-      if (this.presenceMenuDetach) {
-        this.closePresenceMenu();
-        return;
-      }
+      if (this.presenceMenuDetach) return;
 
       const menu = document.createElement('div');
       menu.setAttribute('role', 'menu');
@@ -3214,6 +3104,7 @@ class ProofEditorImpl implements ProofEditor {
 
       this.presenceMenuDetach = attachDismissibleMenu({
         container,
+        trigger: container,
         openClassTarget: menu,
         openClass: 'proof-dropdown--open',
         exitDuration: 100,
@@ -3224,12 +3115,13 @@ class ProofEditorImpl implements ProofEditor {
       });
     };
 
-    container.onclick = openPresenceMenu;
-    container.onkeydown = (ev: KeyboardEvent) => {
-      if (ev.key !== 'Enter' && ev.key !== ' ') return;
-      ev.preventDefault();
-      openPresenceMenu();
-    };
+    attachHoverMenuTrigger({
+      container,
+      trigger: container,
+      isOpen: () => Boolean(this.presenceMenuDetach),
+      open: openPresenceMenu,
+      close: () => this.closePresenceMenu(),
+    });
   }
 
   private setupTitleEditing(titleEl: HTMLElement): void {
@@ -3238,7 +3130,7 @@ class ProofEditorImpl implements ProofEditor {
       titleEl.removeAttribute('role');
       titleEl.removeAttribute('tabindex');
       if (titleEl.contentEditable === 'true') {
-        this.shareBannerTitleEditing = false;
+        this.shareTitleEditing = false;
         titleEl.contentEditable = 'false';
       }
       return;
@@ -3252,7 +3144,7 @@ class ProofEditorImpl implements ProofEditor {
     const startEdit = () => {
       if (!this.collabCanEdit) return;
       if (titleEl.contentEditable === 'true') return;
-      this.shareBannerTitleEditing = true;
+      this.shareTitleEditing = true;
       titleEl.contentEditable = 'true';
       titleEl.style.outline = 'none';
       titleEl.style.borderBottom = '1px solid rgba(0,0,0,0.15)';
@@ -3278,25 +3170,25 @@ class ProofEditorImpl implements ProofEditor {
       }
       if (event.key === 'Escape') {
         event.preventDefault();
-        this.shareBannerTitleEditing = false;
+        this.shareTitleEditing = false;
         titleEl.contentEditable = 'false';
         titleEl.style.borderBottom = '';
-        titleEl.style.color = '#374151';
+        titleEl.style.color = '';
         titleEl.textContent = this.shareDocTitle || 'Untitled';
       }
     });
 
     titleEl.addEventListener('blur', () => {
-      void this.commitShareBannerTitleEdit(titleEl);
+      void this.commitShareTitleEdit(titleEl);
     });
   }
 
-  private async commitShareBannerTitleEdit(titleEl: HTMLElement): Promise<void> {
-    if (!this.shareBannerTitleEditing) return;
-    this.shareBannerTitleEditing = false;
+  private async commitShareTitleEdit(titleEl: HTMLElement): Promise<void> {
+    if (!this.shareTitleEditing) return;
+    this.shareTitleEditing = false;
     titleEl.contentEditable = 'false';
     titleEl.style.borderBottom = '';
-    titleEl.style.color = '#374151';
+    titleEl.style.color = '';
 
     const previousTitle = this.shareDocTitle || 'Untitled';
     const nextTitle = titleEl.textContent?.trim() || '';
@@ -3317,20 +3209,49 @@ class ProofEditorImpl implements ProofEditor {
   }
 
   private applyShareTitle(title: string | null | undefined): void {
-    if (this.shareBannerTitleEditing) return;
+    if (this.shareTitleEditing) return;
     const normalized = typeof title === 'string' ? title.trim() : '';
     const nextTitle = normalized.length > 0 ? normalized : 'Untitled';
     this.shareDocTitle = nextTitle;
     document.title = `${nextTitle} - Proof`;
-    this.updateShareBannerTitleDisplay();
+    this.updateShareTitleDisplay();
   }
 
-  private updateShareBannerTitleDisplay(): void {
-    if (!this.shareBannerTitleEl || this.shareBannerTitleEditing) return;
-    this.setupTitleEditing(this.shareBannerTitleEl);
+  private updateShareTitleDisplay(): void {
+    if (!this.shareTitleEl || this.shareTitleEditing) return;
+    this.setupTitleEditing(this.shareTitleEl);
     const label = this.shareDocTitle || 'Untitled';
-    this.shareBannerTitleEl.textContent = label;
-    this.shareBannerTitleEl.title = `${label} — ${this.getViewerText(this.shareOtherViewerCount)}`;
+    this.shareTitleEl.textContent = label;
+  }
+
+  private ensureShareDocTitleEl(): void {
+    if (!this.isShareMode || !this.collabEnabled) return;
+    const container = document.getElementById('editor-container');
+    const editor = document.getElementById('editor');
+    if (!container || !editor) return;
+
+    let titleEl = container.querySelector<HTMLElement>('#share-doc-title-h1');
+    if (!titleEl) {
+      titleEl = document.createElement('h1');
+      titleEl.id = 'share-doc-title-h1';
+      titleEl.className = 'share-doc-title';
+    }
+    if (titleEl.parentElement !== container || titleEl.nextElementSibling !== editor) {
+      container.insertBefore(titleEl, editor);
+    }
+    this.shareTitleEl = titleEl;
+    this.updateShareTitleDisplay();
+    this.setupTitleEditing(titleEl);
+    this.scheduleBannerLayoutUpdate();
+  }
+
+  private clearShareDocTitleEl(): void {
+    const titleEl = this.shareTitleEl ?? document.getElementById('share-doc-title-h1');
+    if (titleEl?.id === 'share-doc-title-h1') {
+      titleEl.remove();
+    }
+    this.shareTitleEditing = false;
+    this.shareTitleEl = null;
   }
 
   private updateShareBannerAgentControlDisplay(): void {
@@ -3354,36 +3275,23 @@ class ProofEditorImpl implements ProofEditor {
   }
 
   private updateShareBannerSyncDisplay(): void {
-    if (!this.shareBannerSyncDotEl || !this.shareBannerSyncLabelEl) return;
-    const syncStatus = this.getShareSyncStatus();
-    const shouldPulse = this.collabConnectionStatus === 'connecting'
-      || (this.collabConnectionStatus === 'connected' && (!this.collabIsSynced || this.collabUnsyncedChanges > 0));
-
-    this.shareBannerSyncDotEl.style.background = syncStatus.color;
-    if (shouldPulse) {
-      this.ensureShareStatusPulseStyle();
-      this.shareBannerSyncDotEl.style.animation = 'shareStatusPulse 1.2s ease-in-out infinite';
-    } else {
-      this.shareBannerSyncDotEl.style.animation = '';
-    }
-
-    const statusText = this.getSyncStatusTextLabel(syncStatus.label);
-    this.shareBannerSyncLabelEl.textContent = statusText;
-    this.shareBannerSyncLabelEl.style.display = this.shouldShowStatusText(statusText) ? '' : 'none';
+    if (!this.shareBannerSyncDotEl) return;
+    const { kind } = this.getShareSyncStatus();
+    const ariaLabel = kind === 'done' ? 'Saved'
+      : kind === 'progress' ? 'Saving'
+      : 'Connection error';
+    applyShareBubbleStatus(this.shareBannerSyncDotEl, kind, ariaLabel);
   }
 
   private renderShareBannerContent(banner: HTMLElement, otherViewerCount: number): void {
     this.ensureShareBannerResponsiveCSS();
     this.shareOtherViewerCount = otherViewerCount;
     if (
-      this.shareBannerTitleEl
-      && this.shareBannerAvatarsEl
+      this.shareBannerAvatarsEl
       && this.shareBannerAgentSlotEl
       && this.shareBannerSyncDotEl
-      && this.shareBannerSyncLabelEl
-      && banner.contains(this.shareBannerTitleEl)
+      && banner.contains(this.shareBannerAvatarsEl)
     ) {
-      this.updateShareBannerTitleDisplay();
       this.updateShareBannerPresenceDisplay();
       this.updateShareBannerAgentControlDisplay();
       this.updateShareBannerSyncDisplay();
@@ -3395,23 +3303,19 @@ class ProofEditorImpl implements ProofEditor {
     this.closePresenceMenu();
     this.closeAgentMenu();
 
+    this.shareBannerSyncDotEl = createShareBubbleStatusDot();
+    this.updateShareBannerSyncDisplay();
+
     const wordmark = document.createElement('a');
     wordmark.textContent = 'Proof';
     wordmark.href = 'https://www.proofeditor.ai';
     wordmark.target = '_blank';
     wordmark.rel = 'noopener';
-    wordmark.style.cssText = 'display:inline-flex;align-items:center;justify-content:center;min-height:44px;min-width:44px;padding:0 8px;border-radius:10px;font-weight:600;color:#333;font-size:13px;letter-spacing:-0.2px;flex-shrink:0;text-decoration:none;';
+    wordmark.style.cssText = 'display:inline-flex;align-items:center;justify-content:center;min-height:44px;min-width:44px;border-radius:10px;font-weight:600;color:#333;font-size:13px;letter-spacing:-0.2px;flex-shrink:0;text-decoration:none;';
 
-    const separator = document.createElement('span');
-    separator.className = 'share-pill-sep';
-    separator.style.cssText = 'width:1px;height:16px;background:rgba(0,0,0,0.1);flex-shrink:0';
-
-    const title = document.createElement('span');
-    title.className = 'share-pill-title';
-    title.style.cssText = 'font-weight:500;color:#374151;font-size:13px;flex:1 1 auto;min-width:0;';
-    this.shareBannerTitleEl = title;
-    this.updateShareBannerTitleDisplay();
-    this.setupTitleEditing(title);
+    const wordmarkGroup = document.createElement('span');
+    wordmarkGroup.style.cssText = 'display:inline-flex;align-items:center;gap:3px;flex-shrink:0;';
+    wordmarkGroup.append(this.shareBannerSyncDotEl, wordmark);
 
     const avatars = document.createElement('span');
     this.shareBannerAvatarsEl = avatars;
@@ -3423,27 +3327,10 @@ class ProofEditorImpl implements ProofEditor {
     this.shareBannerAgentSlotEl = agentSlot;
     this.updateShareBannerAgentControlDisplay();
 
-    const syncStatusSep = document.createElement('span');
-    syncStatusSep.className = 'share-pill-status-sep';
-    const syncStatusInline = document.createElement('span');
-    syncStatusInline.className = 'share-pill-status-inline';
-    const syncDot = document.createElement('span');
-    syncDot.style.cssText = 'width:7px;height:7px;border-radius:50%;display:inline-block;flex-shrink:0;';
-    const syncLabel = document.createElement('span');
-    syncLabel.className = 'status-label';
-    this.shareBannerSyncDotEl = syncDot;
-    this.shareBannerSyncLabelEl = syncLabel;
-    syncStatusInline.append(syncDot, syncLabel);
-    this.updateShareBannerSyncDisplay();
-
     const shareBtn = this.createShareMenuButton();
 
     banner.replaceChildren(
-      wordmark,
-      separator,
-      title,
-      syncStatusSep,
-      syncStatusInline,
+      wordmarkGroup,
       avatars,
       agentSlot,
       shareBtn,
@@ -4034,14 +3921,13 @@ class ProofEditorImpl implements ProofEditor {
       label: 'Share file',
       iconSize: 14,
     });
+    btn.setAttribute('aria-haspopup', 'menu');
+    btn.setAttribute('aria-expanded', 'false');
 
     const openMenu = () => {
       this.closeAgentMenu();
       this.closePresenceMenu();
-      if (this.shareMenuDetach) {
-        this.closeShareMenu();
-        return;
-      }
+      if (this.shareMenuDetach) return;
 
       const menu = document.createElement('div');
       menu.setAttribute('role', 'menu');
@@ -4141,6 +4027,7 @@ class ProofEditorImpl implements ProofEditor {
 
       this.shareMenuDetach = attachDismissibleMenu({
         container,
+        trigger: btn,
         openClassTarget: menu,
         openClass: 'proof-dropdown--open',
         exitDuration: 100,
@@ -4151,10 +4038,14 @@ class ProofEditorImpl implements ProofEditor {
       });
     };
 
-    btn.onclick = () => {
-      this.triggerHaptic('selection');
-      openMenu();
-    };
+    attachHoverMenuTrigger({
+      container,
+      trigger: btn,
+      isOpen: () => Boolean(this.shareMenuDetach),
+      open: openMenu,
+      close: () => this.closeShareMenu(),
+      onActivate: () => this.triggerHaptic('selection'),
+    });
 
     container.appendChild(btn);
     return container;
@@ -4324,14 +4215,13 @@ class ProofEditorImpl implements ProofEditor {
         className: 'share-pill-agent-trigger',
       });
     }
+    btn.setAttribute('aria-haspopup', 'menu');
+    btn.setAttribute('aria-expanded', 'false');
 
     const openMenu = () => {
       this.closeShareMenu();
       this.closePresenceMenu();
-      if (this.agentMenuDetach) {
-        this.closeAgentMenu();
-        return;
-      }
+      if (this.agentMenuDetach) return;
 
       const menu = document.createElement('div');
       menu.setAttribute('role', 'menu');
@@ -4507,10 +4397,14 @@ class ProofEditorImpl implements ProofEditor {
       });
     };
 
-    btn.onclick = () => {
-      this.triggerHaptic('selection');
-      openMenu();
-    };
+    attachHoverMenuTrigger({
+      container,
+      trigger: btn,
+      isOpen: () => Boolean(this.agentMenuDetach),
+      open: openMenu,
+      close: () => this.closeAgentMenu(),
+      onActivate: () => this.triggerHaptic('selection'),
+    });
     container.appendChild(btn);
     return container;
   }
@@ -4553,21 +4447,23 @@ class ProofEditorImpl implements ProofEditor {
       color: #374151;
       border: 1px solid rgba(0,0,0,0.06);
       border-radius: 16px;
-      padding: 5px 9px 5px 11px;
+      padding: 5px 9px 5px 16px;
       font-size: 13px;
       font-weight: 400;
       z-index: 1000;
       display: flex;
       align-items: center;
       gap: 12px;
+      width: fit-content;
       max-width: calc(100vw - 24px);
+      min-width: 0;
       box-sizing: border-box;
       box-shadow: 0 6px 24px rgba(0,0,0,0.06), 0 0 0 0.5px rgba(0,0,0,0.03);
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      min-width: min(480px, calc(100vw - 24px));
     `;
     this.shareOtherViewerCount = Math.max(0, viewers);
     this.renderShareBannerContent(banner, this.shareOtherViewerCount);
+    this.ensureShareDocTitleEl();
     document.body.appendChild(banner);
     this.scheduleBannerLayoutUpdate();
   }
@@ -4577,16 +4473,10 @@ class ProofEditorImpl implements ProofEditor {
     this.closeShareMenu();
     this.closePresenceMenu();
     this.closeAgentMenu();
-    this.shareBannerTitleEditing = false;
-    this.shareBannerTitleEl = null;
+    this.clearShareDocTitleEl();
     this.shareBannerAvatarsEl = null;
     this.shareBannerAgentSlotEl = null;
     this.shareBannerSyncDotEl = null;
-    this.shareBannerSyncLabelEl = null;
-    if (this.shareStatusHideTimer) {
-      clearTimeout(this.shareStatusHideTimer);
-      this.shareStatusHideTimer = null;
-    }
     if (this.shareDocumentUpdatedTimer) {
       clearTimeout(this.shareDocumentUpdatedTimer);
       this.shareDocumentUpdatedTimer = null;
@@ -4821,6 +4711,7 @@ class ProofEditorImpl implements ProofEditor {
   private updateBannerLayout(): void {
     const editor = document.getElementById('editor');
     if (!editor) return;
+    const shareDocTitle = document.getElementById('share-doc-title-h1') as HTMLElement | null;
 
     const banners: HTMLElement[] = [];
     const shareBanner = document.getElementById('share-banner');
@@ -4830,6 +4721,7 @@ class ProofEditorImpl implements ProofEditor {
 
     if (banners.length === 0) {
       editor.style.paddingTop = '';
+      if (shareDocTitle) shareDocTitle.style.paddingTop = '';
       return;
     }
 
@@ -4841,7 +4733,13 @@ class ProofEditorImpl implements ProofEditor {
     }
 
     const extraSpacing = 32;
-    editor.style.paddingTop = `${Math.ceil(offset + extraSpacing)}px`;
+    const topPadding = `${Math.ceil(offset + extraSpacing)}px`;
+    if (shareDocTitle?.isConnected) {
+      shareDocTitle.style.paddingTop = topPadding;
+      editor.style.paddingTop = '0px';
+    } else {
+      editor.style.paddingTop = topPadding;
+    }
   }
 
   private updateEditableState(viewOverride?: EditorView): void {
